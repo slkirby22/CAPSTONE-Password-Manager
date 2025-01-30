@@ -1,0 +1,65 @@
+<html>
+    <head>
+        <title>View Users</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body>
+        <main>
+            <section>
+                <h3>Users:</h3>
+                <ul id="users-list">
+                    {% for user, details in users.items() %}
+                    {% if session.role == 'admin' or (session.role == 'manager' and (details.role == 'manager' or details.role == 'employee')) %}
+                            <li>
+                                <form action="{{ url_for('update_user_route', user=user) }}" method="post">
+                                    <label for="username">Username:</label>
+                                    <input type="text" name="username" placeholder="New username" value="{{ user }}" autocomplete="off" required>
+                                    <br>
+                                    <label for="password">Password:</label>
+                                    <input type="text" name="password" placeholder="New password" value="{{ details.password }}" autocomplete="off" required>
+                                    <br>
+                                    {% if session.username != user %}
+                                        <label for="role">Role:</label>
+                                        <select name="role" id="role">
+                                            <option value="employee" {% if details.role == 'employee' %}selected{% endif %}>Employee</option>
+                                            {% if current_user_role == 'admin' %}
+                                                <option value="manager" {% if details.role == 'manager' %}selected{% endif %}>Manager</option>
+                                                <option value="admin" {% if details.role == 'admin' %}selected{% endif %}>Admin</option>
+                                            {% endif %}
+                                        </select>
+                                    {% else %}
+                                        <label>Role: {{ details.role }}</label>
+                                    {% endif %}
+                                    <br>
+                                    <button type="submit">Update</button>
+                                </form>
+
+                                {% if session.username != user %}
+                                    <form action="{{ url_for('delete_user_route', user=user) }}" method="post">
+                                        <button type="submit">Delete</button>
+                                    </form>
+                                {% endif %}
+                                {% if session.username != user %}
+                                    <form action="{{ url_for('list_user_passwords_route', user=user) }}" method="get">
+                                        <button type="submit">View Passwords</button>
+                                    </form>
+                                {% endif %}
+                            </li>
+                            <br><br>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </section>
+
+            <section id="user-management">
+                {% if user_role == 'manager' or 'admin' %}
+                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
+                {% endif %}
+            </section>
+
+            <div id="back-to-dashboard">
+                <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
+            </div>
+        </main>
+    </body>
+</html>

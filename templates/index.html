@@ -1,0 +1,31 @@
+<html>
+    <head>
+        <title>Enterprise Password Manager</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <script>
+            window.onbeforeunload = function() {
+                fetch('/logout');
+            }
+        </script>
+    </head>
+    <body>
+        <header>
+            <h1>Welcome to the Enterprise Password Manager</h1>
+        </header>
+
+        <main>
+            <section>
+                <p>This is the central hub for managing and securing your company's passwords.</p>
+                <p>To get started, please log in.</p>
+            </section>
+
+            <section>
+                <a href="{{ url_for('login_route') }}">Login</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Seth Kirby. All rights reserved</p>
+        </footer>
+    </body>
+</html>

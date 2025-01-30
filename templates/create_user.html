@@ -1,0 +1,39 @@
+<html>
+    <head>
+        <title>Create Employee</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body>
+        <header>
+            <h1>Create New Employee</h1>
+        </header>
+        <body>
+            <form action="{{ url_for('create_user_route') }}" method="POST">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" autocomplete="off" required>
+                <br><br>
+
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" autocomplete="off" required>
+                <br><br>
+
+                <label for="role">Role:</label>
+                <select name="role" id="role">
+                    <option value="employee">Employee</option>
+                    {% if current_user_role == 'admin' %}
+                        <option value="manager">Manager</option>
+                        <option value="admin">Admin</option>
+                    {% endif %}
+                </select>
+                <br><br>
+
+                <button type="submit">Create User</button>
+            </form>
+            <br>
+
+            <div id="back-to-dashboard">
+                <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
+            </div>
+        </body>
+    </body>
+</html>

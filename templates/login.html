@@ -1,0 +1,29 @@
+<html>
+    <head>
+        <title>Login</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
+    </head>
+    <body>
+        <header>
+            <h1>Login</h1>
+        </header>
+        <main>
+            <form action="/login" method="post">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" autocomplete="off" required><br><br>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" autocomplete="off" required><br><br>
+                <input type="submit" value="Login">
+            </form>
+
+            {% if error %}
+                <p style="color: red">{{ error }}</p>
+            {% endif %}
+
+            <div>
+                <button type="button" id="password-toggle" onclick="togglePassword()">Show Password</button>
+            </div>
+        </main>
+    </body>
+</html>

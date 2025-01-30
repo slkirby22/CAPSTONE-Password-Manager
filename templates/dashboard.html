@@ -1,0 +1,57 @@
+<html>
+    <head>
+        <title>Dashboard</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body>
+        <header>
+            <h2>Welcome {{ session.username }}!</h2>
+        </header>
+        <main>
+            <section>
+                <h3>Your passwords:</h3>
+                <ul>
+                    {% for service, details in passwords.items() %}
+                        <li>
+                            <strong>Service: {{ service }}:</strong><br>
+
+                            <form action="{{ url_for('update_password_route', service=service) }}" method="post">
+                                <label for="username">Username:</label>
+                                <input type="text" name="username" placeholder="New username" value="{{ details.username }}" autocomplete="off" required>
+                                <br>
+                                <label for="password">Password:</label>
+                                <input type="text" name="password" placeholder="New password" value="{{ details.password }}" autocomplete="off" required>
+                                <br>
+                                <button type="submit">Update</button>
+                            </form>
+                            
+                            <form action="{{ url_for('delete_password_route', service=service) }}" method="post">
+                                <button type="submit">Delete</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+
+                <h3>Add New Password</h3>
+                <form action="{{ url_for('add_password_route') }}" method="POST">
+                    <input type="text" name="service" placeholder="Service Name" autocomplete="off" required>
+                    <input type="text" name="username" placeholder="Username" autocomplete="off" required>
+                    <input type="text" name="password" placeholder="Password" autocomplete="off" required>
+                    <br>
+                    <button type="submit">Add Password</button>
+                </form>
+            </section>
+
+            {% if session.role == 'admin' or session.role == 'manager' %}
+                <section id="user-management">
+                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
+                    <a href="{{ url_for('view_users_route')}}">View Users</a>
+                </section>
+            {% endif %}
+
+            <section id="logout">
+                <a href="/logout">Logout</a>
+            </section>
+        </main>
+    </body>
+</html>
