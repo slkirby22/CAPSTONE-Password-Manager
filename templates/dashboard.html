@@ -11,21 +11,23 @@
             <section>
                 <h3>Your passwords:</h3>
                 <ul>
-                    {% for service, details in passwords.items() %}
+                    {% for password in passwords %}
                         <li>
-                            <strong>Service: {{ service }}:</strong><br>
+                            <strong>Service: {{ password.service_name }}</strong><br>
 
-                            <form action="{{ url_for('update_password_route', service=service) }}" method="post">
+                            <form action="{{ url_for('update_password_route', service=password.service_name) }}" method="post">
+                                <input type="hidden" name="pw_id" value="{{ password.id }}">
                                 <label for="username">Username:</label>
-                                <input type="text" name="username" placeholder="New username" value="{{ details.username }}" autocomplete="off" required>
+                                <input type="text" name="username" placeholder="New username" value="{{ password.username }}" autocomplete="off" required>
                                 <br>
                                 <label for="password">Password:</label>
-                                <input type="text" name="password" placeholder="New password" value="{{ details.password }}" autocomplete="off" required>
+                                <input type="text" name="password" placeholder="New password" value="{{ password.password }}" autocomplete="off" required>
                                 <br>
                                 <button type="submit">Update</button>
                             </form>
                             
-                            <form action="{{ url_for('delete_password_route', service=service) }}" method="post">
+                            <form action="{{ url_for('delete_password_route', service=password.service_name) }}" method="post">
+                                <input type="hidden" name="pw_id" value="{{ password.id }}">
                                 <button type="submit">Delete</button>
                             </form>
                         </li>

@@ -1,8 +1,26 @@
 from flask import Flask, render_template, request, redirect, url_for, session
+from flask_sqlalchemy import SQLAlchemy
 from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, list_user_passwords, add_password, update_password, delete_password
+from models import db, User, Password
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///password_manager.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+
+db.init_app(app)
+
+
+@app.before_request
+def create_table():
+    db.create_all()
+
+    if User.query.count() == 0:
+        admin_user = User(username='ADMIN', password=generate_password_hash('admin'), role='admin')
+        db.session.add(admin_user)
+        db.session.commit()
 
 
 @app.route('/')
@@ -31,17 +49,17 @@ def create_user_route():
 def view_users_route():
     return view_users()
 
-@app.route('/update_user/<user>', methods=['POST'])
-def update_user_route(user):
-    return update_user(user)
+@app.route('/update_user/<user_id>', methods=['POST'])
+def update_user_route(user_id):
+    return update_user(user_id)
 
-@app.route('/delete_user/<user>', methods=['POST'])
-def delete_user_route(user):
-    return delete_user(user)
+@app.route('/delete_user/<user_id>', methods=['POST'])
+def delete_user_route(user_id):
+    return delete_user(user_id)
 
-@app.route('/list_user_passwords/<user>', methods=['GET'])
-def list_user_passwords_route(user):
-    return list_user_passwords(user)
+@app.route('/list_user_passwords/<user_id>', methods=['GET'])
+def list_user_passwords_route(user_id):
+    return list_user_passwords(user_id)
 
 @app.route('/add_password', methods=['POST'])
 def add_password_route():
@@ -54,6 +72,7 @@ def update_password_route(service):
 @app.route('/delete_password/<service>', methods=['POST'])
 def delete_password_route(service):
     return delete_password(service)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

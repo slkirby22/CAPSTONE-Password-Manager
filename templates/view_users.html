@@ -8,39 +8,42 @@
             <section>
                 <h3>Users:</h3>
                 <ul id="users-list">
-                    {% for user, details in users.items() %}
-                    {% if session.role == 'admin' or (session.role == 'manager' and (details.role == 'manager' or details.role == 'employee')) %}
+                    {% for user in users %}
+                    {% if session.role == 'admin' or (session.role == 'manager' and (user.role == 'manager' or user.role == 'employee')) %}
                             <li>
-                                <form action="{{ url_for('update_user_route', user=user) }}" method="post">
+                                <form action="{{ url_for('update_user_route', user_id=user.id) }}" method="post">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
                                     <label for="username">Username:</label>
-                                    <input type="text" name="username" placeholder="New username" value="{{ user }}" autocomplete="off" required>
+                                    <input type="text" name="username" placeholder="New username" value="{{ user.username }}" autocomplete="off" required>
                                     <br>
                                     <label for="password">Password:</label>
-                                    <input type="text" name="password" placeholder="New password" value="{{ details.password }}" autocomplete="off" required>
+                                    <input type="text" name="password" placeholder="New password" autocomplete="off">
                                     <br>
-                                    {% if session.username != user %}
+                                    {% if session.user_id != user.id %}
                                         <label for="role">Role:</label>
                                         <select name="role" id="role">
-                                            <option value="employee" {% if details.role == 'employee' %}selected{% endif %}>Employee</option>
+                                            <option value="employee" {% if user.role == 'employee' %}selected{% endif %}>Employee</option>
                                             {% if current_user_role == 'admin' %}
-                                                <option value="manager" {% if details.role == 'manager' %}selected{% endif %}>Manager</option>
-                                                <option value="admin" {% if details.role == 'admin' %}selected{% endif %}>Admin</option>
+                                                <option value="manager" {% if user.role == 'manager' %}selected{% endif %}>Manager</option>
+                                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
                                             {% endif %}
                                         </select>
                                     {% else %}
-                                        <label>Role: {{ details.role }}</label>
+                                        <label>Role: {{ user.role }}</label>
                                     {% endif %}
                                     <br>
                                     <button type="submit">Update</button>
                                 </form>
 
-                                {% if session.username != user %}
-                                    <form action="{{ url_for('delete_user_route', user=user) }}" method="post">
+                                {% if session.username != user.username %}
+                                    <form action="{{ url_for('delete_user_route', user_id=user.id) }}" method="post">
+                                        <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <button type="submit">Delete</button>
                                     </form>
                                 {% endif %}
-                                {% if session.username != user %}
-                                    <form action="{{ url_for('list_user_passwords_route', user=user) }}" method="get">
+                                {% if session.username != user.username %}
+                                    <form action="{{ url_for('list_user_passwords_route', user_id=user.id) }}" method="get">
+                                        <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <button type="submit">View Passwords</button>
                                     </form>
                                 {% endif %}
