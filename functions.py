@@ -103,12 +103,13 @@ def update_user(user_id):
     if current_user_role not in ['admin', 'manager']:
         return redirect(url_for('dashboard_route', error="You are not authorized to update users."))
     
+    db_user = User.query.filter_by(id=user_id).first()
+
     user_id = request.form['user_id']
     new_username = request.form['username'].upper()
-    new_password = request.form['password']
 
     if not request.form['password']:
-        new_password = current_user.password
+        new_password = db_user.password
     else:
         new_password = generate_password_hash(request.form['password'])
 
@@ -117,8 +118,6 @@ def update_user(user_id):
     else:
         new_role = current_user_role
         session['username'] = new_username
-
-    db_user = User.query.filter_by(id=user_id).first()
 
     if db_user:
         db_user.username = new_username
@@ -170,8 +169,7 @@ def list_user_passwords(user_id):
         return redirect(url_for('dashboard_route', error="You are not authorized to view passwords."))
 
     user = User.query.filter_by(id=user_id).first()
-    user_passwords = Password.query.filter_by(id=user_id).all()
-    print(f"Passwords: {user_passwords}")
+    user_passwords = Password.query.filter_by(user_id=user_id).all()
 
     return render_template('list_user_passwords.html', user=user.username, user_passwords=user_passwords)
 
