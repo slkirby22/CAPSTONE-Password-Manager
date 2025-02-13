@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from models import db, User, Password
-from werkzeug.security import generate_password_hash, check_password_hash
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["scrypt"])
 
 def index():
     if 'user_id' in session:
@@ -15,14 +17,20 @@ def login():
 
         user = User.query.filter_by(username=username).first()
 
-        if user and check_password_hash(user.password, password):
-            session['username'] = user.username
-            session['user_id'] = user.id
-            session['role'] = user.role
-            return redirect(url_for('dashboard_route'))
+        if user:
+            try:
+                if pwd_context.verify(password, user.password):
+                    session['username'] = user.username
+                    session['user_id'] = user.id
+                    session['role'] = user.role
+                    return redirect(url_for('dashboard_route'))
+                else:
+                    return render_template('login.html', error="Invalid password, please try again.")
+            except Exception as e:
+                print(f"Error verifying password: {e}")
         else:
-            return render_template('login.html', error="Invalid credentials, please try again.")
-    
+            return render_template('login.html', error="User not found, please try again.")
+   
     return render_template('login.html')
 
 
@@ -58,7 +66,7 @@ def create_user():
     
     if request.method == 'POST':
         username = request.form['username'].upper()
-        password = generate_password_hash(request.form['password'])
+        password = pwd_context.hash(request.form['password'])
         role = request.form['role']
 
         if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
@@ -111,7 +119,7 @@ def update_user(user_id):
     if not request.form['password']:
         new_password = db_user.password
     else:
-        new_password = generate_password_hash(request.form['password'])
+        new_password = pwd_context.hash(request.form['password'])
 
     if session['user_id'] != user_id:
         new_role = request.form.get('role', current_user_role)
@@ -181,11 +189,12 @@ def add_password():
     service = request.form['service']
     password = request.form['password']
     new_username = request.form['username']
+    notes = request.form['notes']
 
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
-        new_password = Password(service_name=service, username=new_username, password=password, user_id=current_user.id)
+        new_password = Password(service_name=service, username=new_username, password=password, notes=notes, user_id=current_user.id)
         db.session.add(new_password)
         db.session.commit()
 
@@ -199,12 +208,14 @@ def update_password(service):
     password_id = request.form['pw_id']
     new_username = request.form['username']
     new_password = request.form['password']
+    new_notes = request.form['notes']
 
     password_entry = Password.query.filter_by(id=password_id).first()
 
     if password_entry:
         password_entry.username = new_username
         password_entry.password = new_password
+        password_entry.notes = new_notes
         db.session.commit()
     else:
         return redirect(url_for('dashboard_route', error="Password entry not found."))

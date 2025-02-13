@@ -23,6 +23,9 @@
                                 <label for="password">Password:</label>
                                 <input type="text" name="password" placeholder="New password" value="{{ password.password }}" autocomplete="off" required>
                                 <br>
+                                <label for="notes">Notes:</label>
+                                <input type="text" name="notes" placeholder="Notes" value="{{ password.notes }}" autocomplete="off">
+                                <br>
                                 <button type="submit">Update</button>
                             </form>
                             
@@ -39,6 +42,7 @@
                     <input type="text" name="service" placeholder="Service Name" autocomplete="off" required>
                     <input type="text" name="username" placeholder="Username" autocomplete="off" required>
                     <input type="text" name="password" placeholder="Password" autocomplete="off" required>
+                    <input type="text" name="notes" placeholder="Notes" autocomplete="off">
                     <br>
                     <button type="submit">Add Password</button>
                 </form>

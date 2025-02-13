@@ -1,26 +1,26 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, list_user_passwords, add_password, update_password, delete_password
 from models import db, User, Password
-from werkzeug.security import generate_password_hash
+import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///password_manager.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
+app.config['SECRET_KEY'] = os.urandom(24)
 
 db.init_app(app)
 
 
 @app.before_request
-def create_table():
-    db.create_all()
-
-    if User.query.count() == 0:
-        admin_user = User(username='ADMIN', password=generate_password_hash('admin'), role='admin')
-        db.session.add(admin_user)
-        db.session.commit()
+def ensure_db_exists():
+    try:
+        db.session.execute(text("SELECT 1"))
+        print("Database connection established.")
+    except Exception as e:
+        print(f"Error connection to the database {e}")
+        raise
 
 
 @app.route('/')
