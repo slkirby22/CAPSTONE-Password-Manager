@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, current_app
 from models import db, User, Password
 from passlib.context import CryptContext
+from cryptography.fernet import Fernet
 
 pwd_context = CryptContext(schemes=["scrypt"])
 
@@ -38,11 +39,17 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    key = current_app.config['ENCRYPTION_KEY']
+    cipher_suite = Fernet(key)
+
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
         user_role = current_user.role
         user_passwords = Password.query.filter_by(user_id=current_user.id).all()
+
+        for password_entry in user_passwords:
+            password_entry.password = cipher_suite.decrypt(password_entry.password).decode()
     
         return render_template('dashboard.html', user_role=user_role, passwords=user_passwords)
     else:
@@ -170,6 +177,9 @@ def list_user_passwords(user_id):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    key = current_app.config['ENCRYPTION_KEY']
+    cipher_suite = Fernet(key)
+
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
 
@@ -179,6 +189,9 @@ def list_user_passwords(user_id):
     user = User.query.filter_by(id=user_id).first()
     user_passwords = Password.query.filter_by(user_id=user_id).all()
 
+    for password_entry in user_passwords:
+        password_entry.password = cipher_suite.decrypt(password_entry.password).decode()
+
     return render_template('list_user_passwords.html', user=user.username, user_passwords=user_passwords)
 
 
@@ -186,6 +199,9 @@ def add_password():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    key = current_app.config['ENCRYPTION_KEY']
+    cipher_suite = Fernet(key)
+
     service = request.form['service']
     password = request.form['password']
     new_username = request.form['username']
@@ -194,7 +210,10 @@ def add_password():
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
-        new_password = Password(service_name=service, username=new_username, password=password, notes=notes, user_id=current_user.id)
+
+        encrypted_password = cipher_suite.encrypt(password.encode())
+
+        new_password = Password(service_name=service, username=new_username, password=encrypted_password, notes=notes, user_id=current_user.id)
         db.session.add(new_password)
         db.session.commit()
 
@@ -205,6 +224,9 @@ def update_password(service):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    key = current_app.config['ENCRYPTION_KEY']
+    cipher_suite = Fernet(key)
+
     password_id = request.form['pw_id']
     new_username = request.form['username']
     new_password = request.form['password']
@@ -213,8 +235,10 @@ def update_password(service):
     password_entry = Password.query.filter_by(id=password_id).first()
 
     if password_entry:
+        encrypted_password = cipher_suite.encrypt(new_password.encode())
+
         password_entry.username = new_username
-        password_entry.password = new_password
+        password_entry.password = encrypted_password
         password_entry.notes = new_notes
         db.session.commit()
     else:

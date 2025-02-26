@@ -4,11 +4,17 @@ from sqlalchemy import text
 from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, list_user_passwords, add_password, update_password, delete_password
 from models import db, User, Password
 import os
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
+
+def load_key():
+    return open("secret.key", "rb").read()
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
+app.config['ENCRYPTION_KEY'] = load_key()
 
 db.init_app(app)
 
