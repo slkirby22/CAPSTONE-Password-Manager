@@ -19,6 +19,15 @@ user_id INT NOT NULL,
 FOREIGN KEY (user_id) REFERENCES user(id)
 );
 
+CREATE TABLE audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    event_message TEXT,
+    event_type VARCHAR(255),
+    user_id INT NOT NULL,
+    FOREIGN KEY (user_id) references user(id)
+);
+
 INSERT INTO user (username, password, role)
 select 'ADMIN', '$scrypt$ln=16,r=8,p=1$DaE0phQiJOTcuxeCsFaq1Q$1MZ0Uk7thd31SuJEHwZvbdMkr3pmbKmAuoyd1SQRSls', 'admin'
 WHERE NOT EXISTS (SELECT 1 FROM user WHERE username = 'ADMIN');

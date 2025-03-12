@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 db = SQLAlchemy()
 
@@ -29,3 +30,17 @@ class Password(db.Model):
         self.password = password
         self.notes = notes
         self.user_id = user_id
+
+class audit_log(db.Model):
+    __tablename__ = 'audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    event_message = db.Column(db.Text, nullable=False)
+    event_type = db.Column(db.String(255), nullable=False)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
+    def __repr__(self):
+        return f'<Audit Log Entry: {self.id}>'

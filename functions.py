@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, current_app
-from models import db, User, Password
+from models import db, User, Password, audit_log
+from datetime import datetime
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 
@@ -9,6 +10,21 @@ def index():
     if 'user_id' in session:
         return redirect(url_for('dashboard_route'))
     return render_template('index.html')
+
+
+def log_event(message, event_type, user_id=None):
+    try:
+        new_log = audit_log(
+            event_time = datetime.utcnow(),
+            user_id = user_id,
+            event_message = message,
+            event_type = event_type
+        )
+        db.session.add(new_log)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error logging event: {e}")
 
 
 def login():
@@ -24,9 +40,15 @@ def login():
                     session['username'] = user.username
                     session['user_id'] = user.id
                     session['role'] = user.role
+
+                    log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
+
                     return redirect(url_for('dashboard_route'))
                 else:
+                    log_event(f"Failed login attempt for user {user.username}.", "FAILED_LOGIN", user.id)
+                    
                     return render_template('login.html', error="Invalid password, please try again.")
+                    
             except Exception as e:
                 print(f"Error verifying password: {e}")
         else:
@@ -57,6 +79,7 @@ def dashboard():
 
 
 def logout():
+    log_event(f"User {session['username']} logged out.", "USER_LOGOUT", session['user_id'])
     session.pop('user_id', None)
     return redirect(url_for('index_route'))
 
@@ -69,6 +92,7 @@ def create_user():
     current_user_role = current_user.role
 
     if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to create a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to create users."))
     
     if request.method == 'POST':
@@ -88,6 +112,8 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
+        log_event(f"User {current_user.username} created user {username}.", "USER_CREATE", current_user.id)
+
         return redirect(url_for('dashboard_route'))
         
     return render_template('create_user.html', current_user_role=current_user_role)
@@ -101,9 +127,12 @@ def view_users():
     current_user_role = current_user.role
 
     if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to view users.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to view users."))
     
     users = User.query.all()
+
+    log_event(f"User {current_user.username} viewed users.", "USER_VIEW", current_user.id)
 
     return render_template('view_users.html', users=users, current_user_role=current_user_role)
 
@@ -116,6 +145,7 @@ def update_user(user_id):
     current_user_role = current_user.role
 
     if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to update a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to update users."))
     
     db_user = User.query.filter_by(id=user_id).first()
@@ -142,8 +172,10 @@ def update_user(user_id):
 
     if session['user_id'] == db_user.id:
         session['username'] = db_user.username
+        log_event(f"User {current_user.username} updated their own account.", "USER_UPDATE", current_user.id)
         return redirect(url_for('logout_route'))
     else:
+        log_event(f"User {current_user.username} updated user {new_username}.", "USER_UPDATE", current_user.id)
         return redirect(url_for('view_users_route'))
 
 
@@ -155,6 +187,7 @@ def delete_user(user_id):
     current_user_role = current_user.role
     
     if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to delete a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to delete users."))
 
     db_user = User.query.filter_by(id=user_id).first()
@@ -167,6 +200,8 @@ def delete_user(user_id):
         
         db.session.delete(db_user)
         db.session.commit()
+
+        log_event(f"User {current_user.username} deleted user {db_user.username}.", "USER_DELETE", current_user.id)
 
         return redirect(url_for('view_users_route'))
     
@@ -184,6 +219,7 @@ def list_user_passwords(user_id):
     current_user_role = current_user.role
 
     if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to view passwords.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to view passwords."))
 
     user = User.query.filter_by(id=user_id).first()
@@ -191,6 +227,8 @@ def list_user_passwords(user_id):
 
     for password_entry in user_passwords:
         password_entry.password = cipher_suite.decrypt(password_entry.password).decode()
+
+    log_event(f"User {current_user.username} viewed passwords for user {user.username}.", "PASSWORD_VIEW", current_user.id)
 
     return render_template('list_user_passwords.html', user=user.username, user_passwords=user_passwords)
 
@@ -217,6 +255,8 @@ def add_password():
         db.session.add(new_password)
         db.session.commit()
 
+        log_event(f"User {current_user.username} added a password.", "PASSWORD_ADD", current_user.id)
+
     return redirect(url_for('dashboard_route'))
 
 
@@ -241,6 +281,8 @@ def update_password(service):
         password_entry.password = encrypted_password
         password_entry.notes = new_notes
         db.session.commit()
+
+        log_event(f"User {session['username']} updated a password.", "PASSWORD_UPDATE", session['user_id'])
     else:
         return redirect(url_for('dashboard_route', error="Password entry not found."))
 
@@ -258,5 +300,7 @@ def delete_password(service):
     if password_entry:
         db.session.delete(password_entry)
         db.session.commit()
+
+        log_event(f"User {session['username']} deleted a password.", "PASSWORD_DELETE", session['user_id'])
     
     return redirect(url_for('dashboard_route'))
