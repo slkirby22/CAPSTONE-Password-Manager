@@ -208,31 +208,6 @@ def delete_user(user_id):
     return redirect(url_for('view_users_route', error="User not found."))
 
 
-def list_user_passwords(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
-
-    key = current_app.config['ENCRYPTION_KEY']
-    cipher_suite = Fernet(key)
-
-    current_user = User.query.filter_by(id=session['user_id']).first()
-    current_user_role = current_user.role
-
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to view passwords.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to view passwords."))
-
-    user = User.query.filter_by(id=user_id).first()
-    user_passwords = Password.query.filter_by(user_id=user_id).all()
-
-    for password_entry in user_passwords:
-        password_entry.password = cipher_suite.decrypt(password_entry.password).decode()
-
-    log_event(f"User {current_user.username} viewed passwords for user {user.username}.", "PASSWORD_VIEW", current_user.id)
-
-    return render_template('list_user_passwords.html', user=user.username, user_passwords=user_passwords)
-
-
 def add_password():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))

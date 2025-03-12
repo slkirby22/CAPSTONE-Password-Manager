@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, list_user_passwords, add_password, update_password, delete_password
+from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password
 from models import db, User, Password
 import os
 from cryptography.fernet import Fernet
@@ -62,10 +62,6 @@ def update_user_route(user_id):
 @app.route('/delete_user/<user_id>', methods=['POST'])
 def delete_user_route(user_id):
     return delete_user(user_id)
-
-@app.route('/list_user_passwords/<user_id>', methods=['GET'])
-def list_user_passwords_route(user_id):
-    return list_user_passwords(user_id)
 
 @app.route('/add_password', methods=['POST'])
 def add_password_route():
