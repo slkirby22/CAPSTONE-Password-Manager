@@ -279,3 +279,21 @@ def delete_password(service):
         log_event(f"User {session['username']} deleted a password.", "PASSWORD_DELETE", session['user_id'])
     
     return redirect(url_for('dashboard_route'))
+
+
+def audit_log_viewer():
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+    
+    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user_role = current_user.role
+
+    if current_user_role not in ['admin']:
+        log_event(f"User {current_user.username} attempted to view the audit log.", "UNAUTHORIZED_ACTION", current_user.id)
+        return redirect(url_for('dashboard_route', error="You are not authorized to view the audit log."))
+    
+    log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
+
+    audit_logs = audit_log.query.all()
+
+    return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role)

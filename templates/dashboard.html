@@ -54,6 +54,12 @@
                     <a href="{{ url_for('view_users_route')}}">View Users</a>
                 </section>
             {% endif %}
+            {% if session.role == 'admin' %}
+                <br>
+                <section id="log_viewer">
+                    <a href="{{ url_for('audit_log_viewer_route') }}">View Audit Logs</a>
+                </section>
+            {% endif %}
 
             <section id="logout">
                 <a href="/logout">Logout</a>

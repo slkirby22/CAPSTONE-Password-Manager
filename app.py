@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password
+from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password, audit_log_viewer
 from models import db, User, Password
 import os
 from cryptography.fernet import Fernet
@@ -75,6 +75,9 @@ def update_password_route(service):
 def delete_password_route(service):
     return delete_password(service)
 
+@app.route('/audit_log_viewer')
+def audit_log_viewer_route():
+    return audit_log_viewer()
 
 if __name__ == '__main__':
     app.run(debug=True)
