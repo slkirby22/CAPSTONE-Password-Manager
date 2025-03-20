@@ -1,17 +1,24 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password, audit_log_viewer
+from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password, log_event, audit_log_viewer
 from models import db, User, Password
 import os
 from cryptography.fernet import Fernet
 
 app = Flask(__name__)
+# db = SQLAlchemy(app)
 
 def load_key():
-    return open("secret.key", "rb").read()
+    try:
+        return open("secret.key", "rb").read()
+    except FileNotFoundError:
+        print("Encryption key file not found.")
+        log_event("Encryption key file not found.", "error", 0)
+        raise
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://root:root@localhost/password_manager?driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()
@@ -25,7 +32,7 @@ def ensure_db_exists():
         db.session.execute(text("SELECT 1"))
         print("Database connection established.")
     except Exception as e:
-        print(f"Error connection to the database {e}")
+        print(f"Error connecting to the database {e}")
         raise
 
 

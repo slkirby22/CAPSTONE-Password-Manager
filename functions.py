@@ -3,6 +3,7 @@ from models import db, User, Password, audit_log
 from datetime import datetime
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
+import re
 
 pwd_context = CryptContext(schemes=["scrypt"])
 
@@ -97,8 +98,23 @@ def create_user():
     
     if request.method == 'POST':
         username = request.form['username'].upper()
-        password = pwd_context.hash(request.form['password'])
+        password = request.form['password']
         role = request.form['role']
+
+        if len(password) < 8:
+            log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('create_user.html', error="Password must be at least 8 characters long.", usernmame=username, role=role)
+        if not re.search(r"\d", password):
+            log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('create_user.html', error="Password must contain at least one number.", usernmame=username, role=role)
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('create_user.html', error="Password must contain at least one special character.", usernmame=username, role=role)
+        if not re.search(r"[A-Z]", password):
+            log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('create_user.html', error="Password must contain at least one uppercase letter.", usernmame=username, role=role)
+
+        password = pwd_context.hash(password)
 
         if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
             return render_template('create_user.html', error="Invalid role, please try again.")
@@ -153,10 +169,25 @@ def update_user(user_id):
     user_id = request.form['user_id']
     new_username = request.form['username'].upper()
 
-    if not request.form['password']:
-        new_password = db_user.password
+    if request.form['password']:
+        new_password = request.form['password']
+
+        if len(new_password) < 8:
+            log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('view_users.html', error="Password must be at least 8 characters long.", users=User.query.all(), erroronuser=new_username)
+        if not re.search(r"\d", new_password):
+            log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('view_users.html', error="Password must contain at least one number.", users=User.query.all(), erroronuser=new_username)
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", new_password):
+            log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('view_users.html', error="Password must contain at least one special character.", users=User.query.all(), erroronuser=new_username)
+        if not re.search(r"[A-Z]", new_password):
+            log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
+            return render_template('view_users.html', error="Password must contain at least one uppercase letter.", users=User.query.all(), erroronuser=new_username)
+
+        new_password = pwd_context.hash(new_password)
     else:
-        new_password = pwd_context.hash(request.form['password'])
+        new_password = db_user.password
 
     if session['user_id'] != user_id:
         new_role = request.form.get('role', current_user_role)

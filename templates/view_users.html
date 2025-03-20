@@ -41,6 +41,12 @@
                                         <button type="submit">Delete</button>
                                     </form>
                                 {% endif %}
+
+                                {% if erroronuser == user.username %}
+                                    {% if error %}
+                                        <p class="error">{{ error }}</p>
+                                    {% endif %}
+                                {% endif %}
                             </li>
                             <br><br>
                         {% endif %}

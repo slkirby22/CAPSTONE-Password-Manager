@@ -2,6 +2,7 @@
     <head>
         <title>Dashboard</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
     </head>
     <body>
         <header>
@@ -21,13 +22,15 @@
                                 <input type="text" name="username" placeholder="New username" value="{{ password.username }}" autocomplete="off" required>
                                 <br>
                                 <label for="password">Password:</label>
-                                <input type="text" name="password" placeholder="New password" value="{{ password.password }}" autocomplete="off" required>
+                                <input type="password" id="password{{ password.id }}" name="password" placeholder="New password" value="{{ password.password }}" autocomplete="off" required>
                                 <br>
                                 <label for="notes">Notes:</label>
                                 <input type="text" name="notes" placeholder="Notes" value="{{ password.notes }}" autocomplete="off">
                                 <br>
                                 <button type="submit">Update</button>
                             </form>
+
+                            <button type="button" id="toggle-password-{{ password.id }}" onclick="togglePasswordList('{{ password.id }}')">Show Password</button>
                             
                             <form action="{{ url_for('delete_password_route', service=password.service_name) }}" method="post">
                                 <input type="hidden" name="pw_id" value="{{ password.id }}">

@@ -29,6 +29,9 @@
 
                 <button type="submit">Create User</button>
             </form>
+            {% if error %}
+                <p class="error">{{ error }}</p>
+            {% endif %}
             <br>
 
             <div id="back-to-dashboard">
