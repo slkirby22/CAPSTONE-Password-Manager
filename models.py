@@ -1,5 +1,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import pytz
+
+est = pytz.timezone('US/Eastern')
 
 db = SQLAlchemy()
 
@@ -8,6 +11,7 @@ class User(db.Model):
     username = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False)
+    failed_login_attempts = db.Column(db.Integer, default=0)
 
     def __init__(self, username, password, role):
         self.username = username
@@ -35,7 +39,7 @@ class audit_log(db.Model):
     __tablename__ = 'audit_log'
 
     id = db.Column(db.Integer, primary_key=True)
-    event_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    event_time = db.Column(db.DateTime, nullable=False, default = datetime.now(est))
     event_message = db.Column(db.Text, nullable=False)
     event_type = db.Column(db.String(255), nullable=False)
 

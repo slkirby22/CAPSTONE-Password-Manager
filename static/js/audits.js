@@ -1,6 +1,41 @@
 document.addEventListener('DOMContentLoaded', () => {
     populateEventTypeFilter();
+
+    document.getElementById('clear-filters').addEventListener('click', clearAllFilters);
+    document.getElementById('export-csv').addEventListener('click', exportToCSV);
+
+    document.getElementById('start-date').addEventListener('change', fetchLogs);
+    document.getElementById('end-date').addEventListener('change', fetchLogs);
 });
+
+function fetchLogs() {
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+
+    fetch(`/get_audit_logs?start_date=${startDate}&end_date=${endDate}`)
+        .then(response => response.json())
+        .then(data => {
+            // Update the table with the new logs
+            updateTable(data);
+        });
+}
+
+function updateTable(logs) {
+    const tbody = document.querySelector('#audit-logs-table tbody');
+    tbody.innerHTML = ''; // Clear existing rows
+
+    logs.forEach(log => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${log.id}</td>
+            <td>${log.event_time}</td>
+            <td>${log.event_message}</td>
+            <td>${log.event_type}</td>
+            <td>${log.user_id}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
 function populateEventTypeFilter() {
     const table = document.getElementById('audit-logs-table');
@@ -83,7 +118,6 @@ function clearAllFilters() {
     document.querySelector('thead input[placeholder="Filter by ID"]').value = '';
     document.querySelector('thead input[placeholder="Filter by Message"]').value = '';
     document.querySelector('thead input[placeholder="Filter by User ID"]').value = '';
-    document.getElementById('start-date').value = '';
     document.getElementById('end-date').value = '';
     document.getElementById('event-type-filter').value = 'all';
 

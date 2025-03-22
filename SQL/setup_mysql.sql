@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS user (
     username VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL,
-    INDEX idx_username (username)
+    failed_login_attempts INT NOT NULL,
+    INDEX idx_username (username),
+    INDEX idx_failed_logins (failed_login_attempts)
 );
 
 CREATE TABLE IF NOT EXISTS password (
@@ -26,12 +28,12 @@ CREATE TABLE IF NOT EXISTS audit_log (
     event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     event_message TEXT,
     event_type VARCHAR(255),
-    user_id INT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES user(id),
+    user_id INT NULL,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE SET NULL,
     INDEX idx_event_type_user_id (event_type, user_id),
     INDEX idx_event_time (event_time)
 );
 
-INSERT INTO user (username, password, role)
-SELECT 'ADMIN', '$scrypt$ln=16,r=8,p=1$DaE0phQiJOTcuxeCsFaq1Q$1MZ0Uk7thd31SuJEHwZvbdMkr3pmbKmAuoyd1SQRSls', 'admin'
+INSERT INTO user (username, password, role, failed_login_attempts)
+SELECT 'ADMIN', '$scrypt$ln=16,r=8,p=1$DaE0phQiJOTcuxeCsFaq1Q$1MZ0Uk7thd31SuJEHwZvbdMkr3pmbKmAuoyd1SQRSls', 'admin', 0
 WHERE NOT EXISTS (SELECT 1 FROM user WHERE username = 'ADMIN');

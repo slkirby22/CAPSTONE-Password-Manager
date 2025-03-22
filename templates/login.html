@@ -10,6 +10,7 @@
         </header>
         <main>
             <form action="/login" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="username">Username:</label>
                 <input type="text" id="username" name="username" autocomplete="off" required><br><br>
                 <label for="password">Password:</label>
@@ -17,13 +18,14 @@
                 <input type="submit" value="Login">
             </form>
 
+            <div>
+                <button type="button" id="password-toggle">Show Password</button>
+            </div>
+
             {% if error %}
                 <p class="error">{{ error }}</p>
             {% endif %}
 
-            <div>
-                <button type="button" id="password-toggle" onclick="togglePassword()">Show Password</button>
-            </div>
         </main>
     </body>
 </html>

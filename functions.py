@@ -1,11 +1,13 @@
-from flask import Flask, render_template, request, redirect, url_for, session, current_app
+from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify
 from models import db, User, Password, audit_log
-from datetime import datetime
+from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import re
+import pytz
 
-pwd_context = CryptContext(schemes=["scrypt"])
+pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
+est = pytz.timezone('US/Eastern')
 
 def index():
     if 'user_id' in session:
@@ -16,7 +18,7 @@ def index():
 def log_event(message, event_type, user_id=None):
     try:
         new_log = audit_log(
-            event_time = datetime.utcnow(),
+            event_time = datetime.now(est),
             user_id = user_id,
             event_message = message,
             event_type = event_type
@@ -36,22 +38,30 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user:
-            try:
-                if pwd_context.verify(password, user.password):
-                    session['username'] = user.username
-                    session['user_id'] = user.id
-                    session['role'] = user.role
+            if user.failed_login_attempts <= 3:
+                try:
+                    if pwd_context.verify(password, user.password):
+                        session['username'] = user.username
+                        session['user_id'] = user.id
+                        session['role'] = user.role
 
-                    log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
+                        log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
 
-                    return redirect(url_for('dashboard_route'))
-                else:
-                    log_event(f"Failed login attempt for user {user.username}.", "FAILED_LOGIN", user.id)
-                    
-                    return render_template('login.html', error="Invalid password, please try again.")
-                    
-            except Exception as e:
-                print(f"Error verifying password: {e}")
+                        user.failed_login_attempts = 0
+                        db.session.commit()
+
+                        return redirect(url_for('dashboard_route'))
+                    else:
+                        log_event(f"Failed login attempt for user {user.username}.", "FAILED_LOGIN", user.id)
+                        user.failed_login_attempts += 1
+                        db.session.commit()
+                        return render_template('login.html', error="Invalid password, please try again.")
+                        
+                except Exception as e:
+                    print(f"Error verifying password: {e}")
+            else:
+                log_event(f"Account locked for user {user.username} due to too many failed login attempts.", "ACCOUNT_LOCKED", user.id)
+                return render_template('login.html', error="Account locked due to too many failed login attempts.")
         else:
             return render_template('login.html', error="User not found, please try again.")
    
@@ -80,7 +90,8 @@ def dashboard():
 
 
 def logout():
-    log_event(f"User {session['username']} logged out.", "USER_LOGOUT", session['user_id'])
+    user_id = session.get('user_id')
+    log_event(f"User {session['username']} logged out.", "USER_LOGOUT", user_id)
     session.pop('user_id', None)
     return redirect(url_for('index_route'))
 
@@ -128,7 +139,7 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-        log_event(f"User {current_user.username} created user {username}.", "USER_CREATE", current_user.id)
+        log_event(f"User {current_user.username} created user {username}.", "v", current_user.id)
 
         return redirect(url_for('dashboard_route'))
         
@@ -216,15 +227,18 @@ def delete_user(user_id):
     
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
+    print(current_user_role)
     
     if current_user_role not in ['admin', 'manager']:
         log_event(f"User {current_user.username} attempted to delete a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to delete users."))
 
     db_user = User.query.filter_by(id=user_id).first()
+    print(db_user)
 
     if db_user:
         user_passwords = Password.query.filter_by(user_id=user_id).all()
+        print(user_passwords)
 
         for password in user_passwords:
             db.session.delete(password)
@@ -237,6 +251,29 @@ def delete_user(user_id):
         return redirect(url_for('view_users_route'))
     
     return redirect(url_for('view_users_route', error="User not found."))
+
+
+def unlock_account(user_id):
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+    
+    db_user = User.query.filter_by(id=user_id).first()
+
+    if db_user:
+        if session['role'] in ['admin', 'manager']:
+            if db_user.failed_login_attempts > 3:
+                db_user.failed_login_attempts = 0
+                db.session.commit()
+
+                log_event(f"User {session['username']} unlocked user {db_user.username}.", "ACCOUNT_UNLOCK", session['user_id'])
+                return render_template('view_users.html', message="Account unlocked", users=User.query.all(), messageonuser=db_user.username)
+            else:
+                return render_template('view_users.html', error="Account is not locked.", users=User.query.all(), erroronuser=db_user.username)
+        else:
+            log_event(f"User {session['username']} attempted to unlock user {db_user.username} without proper authorization.", "UNAUTHORIZED_ACTION", session['user_id'])
+            return render_template('view_users.html', error="You are not authorized to unlock accounts.", users=User.query.all(), erroronuser=db_user.username)
+    else:
+        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username)
 
 
 def add_password():
@@ -323,8 +360,29 @@ def audit_log_viewer():
         log_event(f"User {current_user.username} attempted to view the audit log.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to view the audit log."))
     
+    default_start_date = datetime.now(est) - timedelta(days=7)
+    audit_logs = audit_log.query.filter(audit_log.event_time >= default_start_date).all()
+
     log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
 
-    audit_logs = audit_log.query.all()
+    return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role, default_start_date=default_start_date.strftime('%Y-%m-%d'))
 
-    return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role)
+
+def get_audit_logs():
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    query = audit_log.query
+    if start_date:
+        query = query.filter(audit_log.event_time >= start_date)
+    if end_date:
+        query = query.filter(audit_log.event_time <= end_date)
+
+    logs = query.all()
+    return jsonify([{
+        'id': log.id,
+        'event_time': log.event_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'event_message': log.event_message,
+        'event_type': log.event_type,
+        'user_id': log.user_id
+    } for log in logs])

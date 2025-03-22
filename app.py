@@ -1,12 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, add_password, update_password, delete_password, log_event, audit_log_viewer
+from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
 from models import db, User, Password
 import os
 from cryptography.fernet import Fernet
+from datetime import datetime, timedelta
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
+limiter = Limiter(app=app, key_func=get_remote_address)
 # db = SQLAlchemy(app)
 
 def load_key():
@@ -22,6 +28,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_ma
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 db.init_app(app)
 
@@ -29,12 +38,23 @@ db.init_app(app)
 @app.before_request
 def ensure_db_exists():
     try:
-        db.session.execute(text("SELECT 1"))
+        User.query.limit(1).first()
         print("Database connection established.")
     except Exception as e:
         print(f"Error connecting to the database {e}")
         raise
 
+
+@app.after_request
+def apply_csp(response):
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'"
+    return response
+def apply_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 @app.route('/')
 def index_route():
@@ -42,6 +62,7 @@ def index_route():
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("6 per minute")
 def login_route():
     return login()
 
@@ -70,6 +91,10 @@ def update_user_route(user_id):
 def delete_user_route(user_id):
     return delete_user(user_id)
 
+@app.route('/unlock_account/<user_id>', methods=['POST'])
+def unlock_account_route(user_id):
+    return unlock_account(user_id)
+
 @app.route('/add_password', methods=['POST'])
 def add_password_route():
     return add_password()
@@ -85,6 +110,10 @@ def delete_password_route(service):
 @app.route('/audit_log_viewer')
 def audit_log_viewer_route():
     return audit_log_viewer()
+
+@app.route('/get_audit_logs')
+def get_audit_logs_route():
+    return get_audit_logs()
 
 if __name__ == '__main__':
     app.run(debug=True)

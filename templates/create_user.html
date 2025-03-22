@@ -9,6 +9,7 @@
         </header>
         <body>
             <form action="{{ url_for('create_user_route') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="username">Username:</label>
                 <input type="text" id="username" name="username" autocomplete="off" required>
                 <br><br>

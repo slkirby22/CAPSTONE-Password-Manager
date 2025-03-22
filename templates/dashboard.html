@@ -17,6 +17,7 @@
                             <strong>Service: {{ password.service_name }}</strong><br>
 
                             <form action="{{ url_for('update_password_route', service=password.service_name) }}" method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="pw_id" value="{{ password.id }}">
                                 <label for="username">Username:</label>
                                 <input type="text" name="username" placeholder="New username" value="{{ password.username }}" autocomplete="off" required>
@@ -30,9 +31,10 @@
                                 <button type="submit">Update</button>
                             </form>
 
-                            <button type="button" id="toggle-password-{{ password.id }}" onclick="togglePasswordList('{{ password.id }}')">Show Password</button>
+                            <button type="button" id="toggle-password-{{ password.id }}">Show Password</button>
                             
                             <form action="{{ url_for('delete_password_route', service=password.service_name) }}" method="post">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="pw_id" value="{{ password.id }}">
                                 <button type="submit">Delete</button>
                             </form>
@@ -42,6 +44,7 @@
 
                 <h3>Add New Password</h3>
                 <form action="{{ url_for('add_password_route') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="service" placeholder="Service Name" autocomplete="off" required>
                     <input type="text" name="username" placeholder="Username" autocomplete="off" required>
                     <input type="text" name="password" placeholder="Password" autocomplete="off" required>

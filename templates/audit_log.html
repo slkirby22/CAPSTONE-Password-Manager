@@ -12,8 +12,8 @@
                     <a href="{{ url_for('dashboard_route') }}">
                         <button>Back to Dashboard</button>
                     </a>                    
-                    <button onclick="clearAllFilters()">Clear All Filters</button>
-                    <button onclick="exportToCSV()">Export to CSV</button>
+                    <button id="clear-filters">Clear All Filters</button>
+                    <button id="export-csv">Export to CSV</button>
                 </div>
             </section>
             <section>
@@ -30,7 +30,7 @@
                         <tr>
                             <th><input type="text" onkeyup="filterTable()" placeholder="Filter by ID"></th>
                             <th>
-                                <input type="date" id="start-date" onchange="filterTable()" placeholder="Start Date">
+                                <input type="date" id="start-date" onchange="filterTable()" placeholder="Start Date" value="{{ default_start_date }}">
                                 <input type="date" id="end-date" onchange="filterTable()" placeholder="End Date">
                             </th>
                             <th><input type="text" onkeyup="filterTable()" placeholder="Filter by Message"></th>
