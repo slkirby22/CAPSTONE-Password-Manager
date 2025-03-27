@@ -24,7 +24,12 @@ def load_key():
         raise
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://root:root@localhost/password_manager?driver=ODBC+Driver+17+for+SQL+Server'
+# app.config['SQLALCHEMY_DATABASE_URI'] = (
+#     'mssql+pyodbc://pm_server:pwmanager@localhost/password_manager?'
+#     'driver=ODBC+Driver+17+for+SQL+Server&'
+#     'autocommit=True&'
+#     'TrustServerCertificate=yes'  # For development only
+# )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()

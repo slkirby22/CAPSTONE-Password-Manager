@@ -360,10 +360,10 @@ def audit_log_viewer():
         log_event(f"User {current_user.username} attempted to view the audit log.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to view the audit log."))
     
+    log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
+
     default_start_date = datetime.now(est) - timedelta(days=7)
     audit_logs = audit_log.query.filter(audit_log.event_time >= default_start_date).all()
-
-    log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
 
     return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role, default_start_date=default_start_date.strftime('%Y-%m-%d'))
 
