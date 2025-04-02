@@ -3,7 +3,6 @@
     <head>
         <title>View Audit Logs</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-        <script src="{{ url_for('static', filename='js/audits.js') }}"></script>
     </head>
     <body>
         <main>
@@ -28,18 +27,18 @@
                             <th>User ID</th>
                         </tr>
                         <tr>
-                            <th><input type="text" onkeyup="filterTable()" placeholder="Filter by ID"></th>
+                            <th><input type="text" id="id-filter" placeholder="Filter by ID"></th>
                             <th>
-                                <input type="date" id="start-date" onchange="filterTable()" placeholder="Start Date" value="{{ default_start_date }}">
-                                <input type="date" id="end-date" onchange="filterTable()" placeholder="End Date">
+                                <input type="date" id="start-date" placeholder="Start Date" value="{{ default_start_date }}">
+                                <input type="date" id="end-date" placeholder="End Date">
                             </th>
-                            <th><input type="text" onkeyup="filterTable()" placeholder="Filter by Message"></th>
+                            <th><input type="text" id="message-filter" placeholder="Filter by Message"></th>
                             <th>
-                                <select id="event-type-filter" onchange="filterTable()">
+                                <select id="event-type-filter">
                                     <option value="all">All</option>
                                 </select>
                             </th>
-                            <th><input type="text" onkeyup="filterTable()" placeholder="Filter by User ID"></th>
+                            <th><input type="text" id="user-id-filter" placeholder="Filter by User ID"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -48,7 +47,7 @@
                             <td>{{ log.id }}</td>
                             <td>{{ log.event_time }}</td>
                             <td>{{ log.event_message }}</td>
-                            <td>{{ log.event_type }}</td>
+                            <td class="event-type">{{ log.event_type }}</td>
                             <td>{{ log.user_id }}</td>
                         </tr>
                         {% endfor %}
@@ -56,5 +55,7 @@
                 </table>
             </section>
         </main>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <script src="{{ url_for('static', filename='js/audits.js') }}" defer></script>
     </body>
 </html>
