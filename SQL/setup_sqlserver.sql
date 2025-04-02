@@ -141,6 +141,25 @@ BEGIN
 END
 GO
 
+-- Token Blacklist table
+IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLE WHERE TABLE_NAME = 'token_blacklist')
+BEGIN
+	CREATE TABLE token_blacklist (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    jti NVARCHAR(36) NOT NULL UNIQUE,
+    expires_at DATETIME2 NOT NULL,
+    created_at DATETIME2 DEFAULT GETDATE()
+	)
+    
+    CREATE INDEX idx_jti ON token_blacklist (jti)
+    PRINT 'Table token_blacklist created successfully.'
+END
+ELSE
+BEGIN
+	PRINT('Table token_blacklist already exists.')
+END
+GO
+
 -- 6. Create initial admin user if not exists
 IF NOT EXISTS (SELECT 1 FROM [user] WHERE username = 'ADMIN')
 BEGIN

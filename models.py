@@ -48,3 +48,14 @@ class audit_log(db.Model):
 
     def __repr__(self):
         return f'<Audit Log Entry: {self.id}>'
+    
+class TokenBlacklist(db.Model):
+    __tablename__ = 'token_blacklist'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), nullable=False, unique=True)  # JWT ID
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<BlacklistedToken {self.jti}>'

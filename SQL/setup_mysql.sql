@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
     INDEX idx_event_time (event_time)
 );
 
+CREATE TABLE token_blacklist (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    jti VARCHAR(36) NOT NULL UNIQUE,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_jti (jti)
+);
+
 INSERT INTO user (username, password, role, failed_login_attempts)
 SELECT 'ADMIN', '$scrypt$ln=16,r=8,p=1$DaE0phQiJOTcuxeCsFaq1Q$1MZ0Uk7thd31SuJEHwZvbdMkr3pmbKmAuoyd1SQRSls', 'admin', 0
 WHERE NOT EXISTS (SELECT 1 FROM user WHERE username = 'ADMIN');

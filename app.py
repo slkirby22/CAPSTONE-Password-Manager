@@ -1,14 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
-from models import db, User, Password
+from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token
+from models import db, User, Password, TokenBlacklist
 import os
 from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWTManager
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
@@ -36,10 +38,14 @@ app.config['ENCRYPTION_KEY'] = load_key()
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['JWT_SECRET_KEY'] = 'your-256-bit-secret'  # Change this!
+app.config['JWT_TOKEN_LOCATION'] = ['headers']  # Look for JWT in headers
+
+jwt = JWTManager(app)
 
 db.init_app(app)
 
-
+# Monolithic Web App Routes
 @app.before_request
 def ensure_db_exists():
     try:
@@ -48,7 +54,6 @@ def ensure_db_exists():
     except Exception as e:
         print(f"Error connecting to the database {e}")
         raise
-
 
 @app.after_request
 def apply_csp(response):
@@ -119,6 +124,60 @@ def audit_log_viewer_route():
 @app.route('/get_audit_logs')
 def get_audit_logs_route():
     return get_audit_logs()
+
+
+# API Routes
+@app.route('/api/login', methods=['POST'])
+@csrf.exempt 
+@limiter.limit("5 per minute")
+def api_login():
+    if not request.is_json:
+        return jsonify({"error": "JSON required"}), 400
+        
+    data = request.get_json()
+    result = authenticate_and_get_token(
+        username=data.get('username'),
+        password=data.get('password')
+    )
+    
+    if not result:
+        return jsonify({"error": "Invalid credentials"}), 401
+    elif "error" in result:
+        return jsonify(result), 403
+    
+    return jsonify(result), 200
+
+@app.route('/api/logout', methods=['POST'])
+@csrf.exempt
+@jwt_required()
+def api_logout():
+    return jsonify(revoke_token())
+
+# Callback to check if a token is revoked
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    jti = jwt_payload["jti"]
+    return TokenBlacklist.query.filter_by(jti=jti).first() is not None
+
+# Error handler for revoked tokens
+@jwt.revoked_token_loader
+def handle_revoked_token(jwt_header, jwt_payload):
+    return jsonify({"error": "Token revoked"}), 401
+
+@app.route('/api/dashboard')
+@jwt_required()
+@limiter.limit("10 per minute")
+def api_dashboard():
+    if not get_jwt_identity():
+        return jsonify({"error": "Unauthorized"}), 401
+    user_id = get_jwt_identity()
+    
+    data = get_dashboard_data(user_id)  # Calls API function
+    if not data:
+        return jsonify({"error": "User not found"}), 404
+    
+    return jsonify(data)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
