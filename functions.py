@@ -139,7 +139,7 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-        log_event(f"User {current_user.username} created user {username}.", "v", current_user.id)
+        log_event(f"User {current_user.username} created user {username}.", "USER_CREATE", current_user.id)
 
         return redirect(url_for('dashboard_route'))
         

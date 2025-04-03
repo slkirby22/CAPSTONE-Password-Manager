@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
-from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token
+from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token, add_password_api, update_password_api, delete_password_api
 from models import db, User, Password, TokenBlacklist
 import os
 from cryptography.fernet import Fernet
@@ -178,6 +178,35 @@ def api_dashboard():
     
     return jsonify(data)
 
+@app.route('/api/passwords', methods=['POST'])
+@csrf.exempt
+@jwt_required()
+@limiter.limit("10 per minute")
+def api_add_password():
+    if not request.is_json:
+        return jsonify({"error": "JSON required"}), 400
+    
+    result = add_password_api(get_jwt_identity(), request.get_json())
+    return jsonify(result), result.get("status_code", 200)
+
+@app.route('/api/passwords/<int:password_id>', methods=['PATCH'])
+@csrf.exempt
+@jwt_required()
+@limiter.limit("10 per minute")
+def api_update_password(password_id):
+    if not request.is_json:
+        return jsonify({"error": "JSON required"}), 400
+    
+    result = update_password_api(get_jwt_identity(), password_id, request.get_json())
+    return jsonify(result), result.get("status_code", 200)
+
+@app.route('/api/passwords/<int:password_id>', methods=['DELETE'])
+@csrf.exempt
+@jwt_required()
+@limiter.limit("10 per minute")
+def api_delete_password(password_id):
+    result = delete_password_api(get_jwt_identity(), password_id)
+    return jsonify(result), result.get("status_code", 200)
 
 if __name__ == '__main__':
     app.run(debug=True)

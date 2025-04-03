@@ -71,3 +71,73 @@ def get_dashboard_data(user_id):
         },
         "passwords": passwords_data
     }
+
+def add_password_api(user_id, data):
+    """Add a new password with validation"""
+    required_fields = ['service_name', 'username', 'password']
+    if not all(field in data for field in required_fields):
+        return {"error": "Missing required fields", "status_code": 400}
+    
+    try:
+        cipher_suite = Fernet(current_app.config['ENCRYPTION_KEY'])
+        encrypted_password = cipher_suite.encrypt(data['password'].encode())
+        
+        new_password = Password(
+            user_id=user_id,
+            service_name=data['service_name'],
+            username=data['username'],
+            password=encrypted_password,
+            notes=data.get('notes', '')
+        )
+        
+        db.session.add(new_password)
+        db.session.commit()
+        
+        return {
+            "message": "Password added successfully",
+            "password_id": new_password.id
+        }
+    except Exception as e:
+        db.session.rollback()
+        return {"error": str(e), "status_code": 500}
+
+def update_password_api(user_id, password_id, data):
+    """Update password with partial updates"""
+    if not data:
+        return {"error": "No fields to update", "status_code": 400}
+        
+    password_entry = Password.query.filter_by(id=password_id, user_id=user_id).first()
+    if not password_entry:
+        return {"error": "Password not found", "status_code": 404}
+    
+    try:
+        cipher_suite = Fernet(current_app.config['ENCRYPTION_KEY'])
+        
+        if 'password' in data:
+            password_entry.password = cipher_suite.encrypt(data['password'].encode())
+        if 'service_name' in data:
+            password_entry.service_name = data['service_name']
+        if 'username' in data:
+            password_entry.username = data['username']
+        if 'notes' in data:
+            password_entry.notes = data['notes']
+            
+        db.session.commit()
+        return {"message": "Password updated successfully"}
+    except Exception as e:
+        db.session.rollback()
+        return {"error": str(e), "status_code": 500}
+
+def delete_password_api(user_id, password_id):
+    """Delete password with validation"""
+    password_entry = Password.query.filter_by(id=password_id, user_id=user_id).first()
+    if not password_entry:
+        return {"error": "Password not found", "status_code": 404}
+    
+    try:
+        db.session.delete(password_entry)
+        db.session.commit()
+        return {"message": "Password deleted successfully"}
+    except Exception as e:
+        db.session.rollback()
+        return {"error": str(e), "status_code": 500}
