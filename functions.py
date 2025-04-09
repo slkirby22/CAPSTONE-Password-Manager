@@ -89,6 +89,39 @@ def dashboard():
         return redirect(url_for('index_route'))
 
 
+def select_password_for_edit():
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+
+    service_name = request.args.get('service_name')
+    
+    if not service_name:
+        return redirect(url_for('dashboard_route'))
+
+    key = current_app.config['ENCRYPTION_KEY']
+    cipher_suite = Fernet(key)
+
+    current_user = User.query.filter_by(id=session['user_id']).first()
+
+    if current_user:
+        # Fetch the selected password for editing
+        selected_password = Password.query.filter_by(user_id=current_user.id, service_name=service_name).first()
+
+        if selected_password:
+            # Decrypt the password
+            selected_password.password = cipher_suite.decrypt(selected_password.password).decode()
+
+            # Fetch all passwords for the dropdown list
+            user_passwords = Password.query.filter_by(user_id=current_user.id).all()
+
+            # Render the dashboard with the selected password and all passwords
+            return render_template('dashboard.html', selected_password=selected_password, passwords=user_passwords)
+        else:
+            return redirect(url_for('dashboard_route'))
+    else:
+        return redirect(url_for('index_route'))
+
+
 def logout():
     user_id = session.get('user_id')
     log_event(f"User {session['username']} logged out.", "USER_LOGOUT", user_id)
@@ -159,9 +192,38 @@ def view_users():
     
     users = User.query.all()
 
-    log_event(f"User {current_user.username} viewed users.", "USER_VIEW", current_user.id)
+    # Handle form submission for selecting a user to edit
+    selected_user = None
+    if request.method == 'POST':
+        selected_user_id = request.form.get('selected_user_id')
+        selected_user = User.query.filter_by(id=selected_user_id).first()
 
-    return render_template('view_users.html', users=users, current_user_role=current_user_role)
+    log_event(f"User {current_user.username} viewed or selected user to edit.", "USER_VIEW", current_user.id)
+
+    return render_template('view_users.html', users=users, selected_user=selected_user, current_user_role=current_user_role)
+
+
+def select_user_for_edit():
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+
+    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user_role = current_user.role
+
+    if current_user_role not in ['admin', 'manager']:
+        log_event(f"User {current_user.username} attempted to edit a user without permission.", "UNAUTHORIZED_ACTION", current_user.id)
+        return redirect(url_for('dashboard_route', error="You are not authorized to edit users."))
+
+    if request.method == 'POST':
+        selected_user_id = request.form['selected_user_id']
+        return redirect(url_for('update_user', user_id=selected_user_id))
+
+    # Query all users and render the user selection page
+    users = User.query.all()
+
+    log_event(f"User {current_user.username} is viewing the user selection page.", "USER_VIEW", current_user.id)
+
+    return render_template('select_user_for_edit.html', users=users)
 
 
 def update_user(user_id):
@@ -177,48 +239,66 @@ def update_user(user_id):
     
     db_user = User.query.filter_by(id=user_id).first()
 
-    user_id = request.form['user_id']
+    # Make sure the form is passed correctly
+    if not db_user:
+        return redirect(url_for('view_users_route'))
+
     new_username = request.form['username'].upper()
 
+    # Handle password update and validation
     if request.form['password']:
         new_password = request.form['password']
 
         if len(new_password) < 8:
             log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('view_users.html', error="Password must be at least 8 characters long.", users=User.query.all(), erroronuser=new_username)
+            return render_template('view_users.html', error="Password must be at least 8 characters long.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
+
         if not re.search(r"\d", new_password):
             log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('view_users.html', error="Password must contain at least one number.", users=User.query.all(), erroronuser=new_username)
+            return render_template('view_users.html', error="Password must contain at least one number.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
+
         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", new_password):
             log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('view_users.html', error="Password must contain at least one special character.", users=User.query.all(), erroronuser=new_username)
+            return render_template('view_users.html', error="Password must contain at least one special character.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
+
         if not re.search(r"[A-Z]", new_password):
             log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('view_users.html', error="Password must contain at least one uppercase letter.", users=User.query.all(), erroronuser=new_username)
+            return render_template('view_users.html', error="Password must contain at least one uppercase letter.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
 
         new_password = pwd_context.hash(new_password)
     else:
         new_password = db_user.password
 
+    # Ensure the username is not taken
+    if new_username != db_user.username and User.query.filter_by(username=new_username).first():
+        return render_template('view_users.html', error="Username taken, please try again.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
+
+    # Determine if user is updating their own account or someone else's
     if session['user_id'] != user_id:
-        new_role = request.form.get('role', current_user_role)
+        new_role = request.form.get('role', db_user.role)  # Role comes from the form
     else:
-        new_role = current_user_role
-        session['username'] = new_username
+        new_role = current_user_role  # Keep the current role for self updates
+        session['username'] = new_username  # Update session with new username if updating own account
 
-    if db_user:
-        db_user.username = new_username
-        db_user.password = new_password
-        db_user.role = new_role
-        db.session.commit()
+    # Update the user in the database
+    db_user.username = new_username
+    db_user.password = new_password
+    db_user.role = new_role
+    db.session.commit()
 
-    if session['user_id'] == db_user.id:
-        session['username'] = db_user.username
+    # Fetch the updated user from the database again (ensure the latest data)
+    updated_user = User.query.filter_by(id=user_id).first()
+
+    # If the logged-in user is updating their own account, log them out
+    if session['user_id'] == updated_user.id:
+        session['username'] = updated_user.username  # Ensure session reflects updated username
         log_event(f"User {current_user.username} updated their own account.", "USER_UPDATE", current_user.id)
         return redirect(url_for('logout_route'))
+
     else:
         log_event(f"User {current_user.username} updated user {new_username}.", "USER_UPDATE", current_user.id)
-        return redirect(url_for('view_users_route'))
+        # Make sure the updated user data is passed to the template
+        return render_template('view_users.html', message="User updated successfully!", users=User.query.all(), messageonuser=updated_user.username, selected_user=updated_user)
 
 
 def delete_user(user_id):
@@ -266,14 +346,14 @@ def unlock_account(user_id):
                 db.session.commit()
 
                 log_event(f"User {session['username']} unlocked user {db_user.username}.", "ACCOUNT_UNLOCK", session['user_id'])
-                return render_template('view_users.html', message="Account unlocked", users=User.query.all(), messageonuser=db_user.username)
+                return render_template('view_users.html', message="Account unlocked", users=User.query.all(), messageonuser=db_user.username, selected_user=db_user)
             else:
-                return render_template('view_users.html', error="Account is not locked.", users=User.query.all(), erroronuser=db_user.username)
+                return render_template('view_users.html', error="Account is not locked.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
         else:
             log_event(f"User {session['username']} attempted to unlock user {db_user.username} without proper authorization.", "UNAUTHORIZED_ACTION", session['user_id'])
-            return render_template('view_users.html', error="You are not authorized to unlock accounts.", users=User.query.all(), erroronuser=db_user.username)
+            return render_template('view_users.html', error="You are not authorized to unlock accounts.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
     else:
-        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username)
+        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
 
 
 def add_password():
@@ -304,30 +384,28 @@ def add_password():
 
 
 def update_password(service):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
-    
-    key = current_app.config['ENCRYPTION_KEY']
-    cipher_suite = Fernet(key)
+    password_id = request.form.get('pw_id')
+    username = request.form.get('username')
+    password = request.form.get('password')
+    notes = request.form.get('notes')
 
-    password_id = request.form['pw_id']
-    new_username = request.form['username']
-    new_password = request.form['password']
-    new_notes = request.form['notes']
+    # Get the selected password to update
+    password_to_update = Password.query.filter_by(id=password_id).first()
 
-    password_entry = Password.query.filter_by(id=password_id).first()
+    if password_to_update:
+        # Update the password's fields
+        password_to_update.username = username
+        password_to_update.password = password
+        password_to_update.notes = notes
 
-    if password_entry:
-        encrypted_password = cipher_suite.encrypt(new_password.encode())
+        # Encrypt the password before saving it back to the database
+        key = current_app.config['ENCRYPTION_KEY']
+        cipher_suite = Fernet(key)
+        encrypted_password = cipher_suite.encrypt(password.encode())
+        password_to_update.password = encrypted_password
 
-        password_entry.username = new_username
-        password_entry.password = encrypted_password
-        password_entry.notes = new_notes
+        # Commit changes to the database
         db.session.commit()
-
-        log_event(f"User {session['username']} updated a password.", "PASSWORD_UPDATE", session['user_id'])
-    else:
-        return redirect(url_for('dashboard_route', error="Password entry not found."))
 
     return redirect(url_for('dashboard_route'))
 

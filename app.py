@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, logout, create_user, view_users, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
+from functions import index, login, dashboard, select_password_for_edit, logout, create_user, view_users, select_user_for_edit, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
 from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token, add_password_api, update_password_api, delete_password_api
 from models import db, User, Password, TokenBlacklist
 import os
@@ -72,14 +72,17 @@ def index_route():
 
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("6 per minute")
+@limiter.limit("10 per minute")
 def login_route():
     return login()
-
 
 @app.route('/dashboard')
 def dashboard_route():
     return dashboard()
+
+@app.route('/select_password_for_edit', methods=['GET'])
+def select_password_for_edit_route():
+    return select_password_for_edit()
 
 @app.route('/logout')
 def logout_route():
@@ -89,9 +92,13 @@ def logout_route():
 def create_user_route():
     return create_user()
 
-@app.route('/view_users')
+@app.route('/view_users', methods=['GET', 'POST'])
 def view_users_route():
     return view_users()
+
+@app.route('/select_user_for_edit', methods=['GET', 'POST'])
+def select_user_for_edit_route():
+    return select_user_for_edit()
 
 @app.route('/update_user/<user_id>', methods=['POST'])
 def update_user_route(user_id):

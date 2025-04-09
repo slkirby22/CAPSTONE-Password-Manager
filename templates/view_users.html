@@ -1,4 +1,4 @@
-<html>
+<!-- <html>
     <head>
         <title>View Users</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
@@ -81,6 +81,173 @@
             <div id="back-to-dashboard">
                 <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
             </div>
+        </main>
+    </body>
+</html> -->
+<!-- <html>
+    <head>
+        <title>View Users</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body>
+        <main>
+            <section>
+                <h3>Users:</h3>
+
+                <form id="select-user-form" action="{{ url_for('select_user_for_edit_route') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="selected_user">Select User:</label>
+                    <select name="selected_user" id="selected_user">
+                        <option value="">-- Select User --</option>
+                        {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Select User</button>
+                </form>
+
+                {% if selected_user %}
+                    <form action="{{ url_for('update_user_route', user_id=selected_user.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+
+                        <label for="username">Username:</label>
+                        <input type="text" name="username" placeholder="New username" value="{{ selected_user.username }}" autocomplete="off" required>
+                        <br>
+
+                        <label for="password">Password:</label>
+                        <input type="text" name="password" placeholder="New password" autocomplete="off">
+                        <br>
+
+                        {% if session.user_id != selected_user.id %}
+                            <label for="role">Role:</label>
+                            <select name="role" id="role">
+                                <option value="employee" {% if selected_user.role == 'employee' %}selected{% endif %}>Employee</option>
+                                {% if current_user_role == 'admin' %}
+                                    <option value="manager" {% if selected_user.role == 'manager' %}selected{% endif %}>Manager</option>
+                                    <option value="admin" {% if selected_user.role == 'admin' %}selected{% endif %}>Admin</option>
+                                {% endif %}
+                            </select>
+                        {% else %}
+                            <label>Role: {{ selected_user.role }}</label>
+                        {% endif %}
+                        <br>
+
+                        <button type="submit">Update</button>
+                    </form>
+                {% endif %}
+            </section>
+
+            <section id="user-management">
+                {% if user_role == 'manager' or user_role == 'admin' %}
+                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
+                {% endif %}
+            </section>
+
+            <div id="back-to-dashboard">
+                <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
+            </div>
+        </main>
+    </body>
+</html>
+ -->
+<html>
+    <head>
+        <title>View Users</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body>
+        <main>
+            <section>
+                <h3>Select a User to Edit:</h3>
+                <form action="{{ url_for('view_users_route') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="selected_user_id">Choose a User:</label>
+                    <select name="selected_user_id" id="selected_user_id" required>
+                        <option value="" disabled selected>Select a user</option>
+                        {% for user in users %}
+                            {% if session.role == 'admin' or (session.role == 'manager' and (user.role == 'manager' or user.role == 'employee')) %}
+                                <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Edit Selected User</button>
+                </form>
+            </section>
+
+            {% if selected_user %}
+            <section>
+                <h3>Edit User Details:</h3>
+                <form action="{{ url_for('update_user_route', user_id=selected_user.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+
+                    <label for="username">Username:</label>
+                    <input type="text" name="username" value="{{ selected_user.username }}" required>
+                    <br>
+
+                    <label for="password">Password:</label>
+                    <input type="password" name="password" placeholder="New password">
+                    <br>
+
+                    {% if session.user_id != selected_user.id %}
+                    <label for="role">Role:</label>
+                    <select name="role" id="role">
+                        <option value="employee" {% if selected_user.role == 'employee' %}selected{% endif %}>Employee</option>
+                        {% if current_user_role == 'admin' %}
+                            <option value="manager" {% if selected_user.role == 'manager' %}selected{% endif %}>Manager</option>
+                            <option value="admin" {% if selected_user.role == 'admin' %}selected{% endif %}>Admin</option>
+                        {% endif %}
+                    </select><br>
+                    {% else %}
+                        <label>Role: {{ selected_user.role }}</label><br>
+                    {% endif %}
+
+                    <button type="submit">Update User</button>
+                </form>
+
+                {% if session.username != selected_user.username %}
+                <form action="{{ url_for('delete_user_route', user_id=selected_user.id) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+                    <button type="submit">Delete</button>
+                </form>
+                {% endif %}
+
+                {% if session.role == 'admin' or (session.role == 'manager' and (user.role == 'manager' or user.role == 'employee')) %}
+                    {% if session.username != selected_user.username %}
+                        <form action="{{ url_for('unlock_account_route', user_id=selected_user.id) }}" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+                            <button type="submit">Unlock Account</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+
+                {% if messageonuser == selected_user.username %}
+                    {% if message %} 
+                        <p class="message">{{ message }}</p>
+                    {% endif %}
+                {% endif %}
+
+                {% if erroronuser == selected_user.username %}
+                    {% if error %}
+                        <p class="error">{{ error }}</p>
+                    {% endif %}
+                {% endif %}
+            </section>
+            {% endif %}
+
+
+            <section id="user-management">
+                {% if user_role == 'manager' or 'admin' %}
+                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
+                {% endif %}
+            </section>
+
+            <section id="back-to-dashboard">
+                <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
+            </section>
         </main>
     </body>
 </html>

@@ -11,36 +11,43 @@
         <main>
             <section>
                 <h3>Your passwords:</h3>
-                <ul>
-                    {% for password in passwords %}
-                        <li>
-                            <strong>Service: {{ password.service_name }}</strong><br>
+                
+                <!-- Dropdown to select a service -->
+                <form action="{{ url_for('select_password_for_edit_route') }}" method="GET">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="service_name">Select Service:</label>
+                    <select name="service_name" id="service_name" required>
+                        <option value="" disabled selected>Select a service</option>
+                        {% for password in passwords %}
+                            <option value="{{ password.service_name }}">{{ password.service_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">View</button>
+                </form>
 
-                            <form action="{{ url_for('update_password_route', service=password.service_name) }}" method="post">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="pw_id" value="{{ password.id }}">
-                                <label for="username">Username:</label>
-                                <input type="text" name="username" placeholder="New username" value="{{ password.username }}" autocomplete="off" required>
-                                <br>
-                                <label for="password">Password:</label>
-                                <input type="password" id="password{{ password.id }}" name="password" placeholder="New password" value="{{ password.password }}" autocomplete="off" required>
-                                <br>
-                                <label for="notes">Notes:</label>
-                                <input type="text" name="notes" placeholder="Notes" value="{{ password.notes }}" autocomplete="off">
-                                <br>
-                                <button type="submit">Update</button>
-                            </form>
-
-                            <button type="button" id="toggle-password-{{ password.id }}">Show Password</button>
-                            
-                            <form action="{{ url_for('delete_password_route', service=password.service_name) }}" method="post">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="pw_id" value="{{ password.id }}">
-                                <button type="submit">Delete</button>
-                            </form>
-                        </li>
-                    {% endfor %}
-                </ul>
+                {% if selected_password %}
+                    <!-- Form to edit the selected password -->
+                    <form action="{{ url_for('select_password_for_edit_route', service=selected_password.service_name) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
+                        <label for="username">Username:</label>
+                        <input type="text" name="username" placeholder="New username" value="{{ selected_password.username }}" autocomplete="off" required>
+                        <br>
+                        <label for="password">Password:</label>
+                        <input type="password" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
+                        <br>
+                        <label for="notes">Notes:</label>
+                        <input type="text" name="notes" placeholder="Notes" value="{{ selected_password.notes }}" autocomplete="off">
+                        <br>
+                        <button type="submit">Update</button>
+                    </form>
+                    <button type="button" id="toggle-password-{{ selected_password.id }}">Show Password</button>
+                    <form action="{{ url_for('delete_password_route', service=selected_password.service_name) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
+                        <button type="submit">Delete</button>
+                    </form>
+                {% endif %}
 
                 <h3>Add New Password</h3>
                 <form action="{{ url_for('add_password_route') }}" method="POST">
