@@ -1,82 +1,102 @@
 <html>
     <head>
         <title>Dashboard</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
         <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
+        <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     </head>
-    <body>
-        <header>
-            <h2>Welcome {{ session.username }}!</h2>
+    <body class="bg-light">
+        <header class="shadow-sm header-height mb-4">
+            <div class="container">
+                <h2 class="mb-0 text-center">Welcome, {{ session.username }}!</h2>
+            </div>
         </header>
-        <main>
-            <section>
-                <h3>Your passwords:</h3>
-                
-                <!-- Dropdown to select a service -->
-                <form action="{{ url_for('select_password_for_edit_route') }}" method="GET">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label for="service_name">Select Service:</label>
-                    <select name="service_name" id="service_name" required>
-                        <option value="" disabled selected>Select a service</option>
-                        {% for password in passwords %}
-                            <option value="{{ password.service_name }}">{{ password.service_name }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit">View</button>
-                </form>
+        <main class="main-container">
+            <div class="card card-centered">
+                <div class="card-body text-center">
+                    <h3 class="card-title">Your passwords:</h3>
+                    
+                    <form action="{{ url_for('select_password_for_edit_route') }}" method="GET" class="mb-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-row">
+                            <label for="service_name" class="form-label">Select Service:</label>
+                            <select class="form-select form-control-custom" name="service_name" id="service_name" required>
+                                <option value="" disabled selected>Select a service</option>
+                                {% for password in passwords %}
+                                    <option value="{{ password.service_name }}">{{ password.service_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-3">View</button>
+                    </form>
 
-                {% if selected_password %}
-                    <!-- Form to edit the selected password -->
-                    <form action="{{ url_for('select_password_for_edit_route', service=selected_password.service_name) }}" method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
-                        <label for="username">Username:</label>
-                        <input type="text" name="username" placeholder="New username" value="{{ selected_password.username }}" autocomplete="off" required>
-                        <br>
-                        <label for="password">Password:</label>
-                        <input type="password" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
-                        <br>
-                        <label for="notes">Notes:</label>
-                        <input type="text" name="notes" placeholder="Notes" value="{{ selected_password.notes }}" autocomplete="off">
-                        <br>
-                        <button type="submit">Update</button>
-                    </form>
-                    <button type="button" id="toggle-password-{{ selected_password.id }}">Show Password</button>
-                    <form action="{{ url_for('delete_password_route', service=selected_password.service_name) }}" method="post">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
-                        <button type="submit">Delete</button>
-                    </form>
+                    {% if selected_password %}
+                        <div class="password-form">
+                            <form action="{{ url_for('select_password_for_edit_route', service=selected_password.service_name) }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
+                                <div class="form-row">
+                                    <label for="username" class="form-label">Username:</label>
+                                    <input type="text" class="form-control form-control-custom" name="username" placeholder="New username" value="{{ selected_password.username }}" autocomplete="off" required>
+                                </div>
+                                <div class="form-row">
+                                    <label for="password" class="form-label">Password:</label>
+                                    <input type="password" class="form-control form-control-custom" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
+                                </div>
+                                <div class="form-row">
+                                    <label for="notes" class="form-label">Notes:</label>
+                                    <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" value="{{ selected_password.notes }}" autocomplete="off">
+                                </div>
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary mx-2">Update</button>
+                                    <button type="button" class="btn btn-secondary mx-2" id="toggle-password-{{ selected_password.id }}">Show Password</button>
+                                    <button type="submit" formaction="{{ url_for('delete_password_route', service=selected_password.service_name) }}" class="btn btn-danger mx-2">Delete</button>
+                                </div>
+                            </form>
+                        </div>
+                    {% endif %}
+
+                    <div class="password-form">
+                        <h3>Add New Password</h3>
+                        <form action="{{ url_for('add_password_route') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="form-row">
+                                <input type="text" class="form-control form-control-custom" name="service" placeholder="Service Name" autocomplete="off" required>
+                            </div>
+                            <div class="form-row">
+                                <input type="text" class="form-control form-control-custom" name="username" placeholder="Username" autocomplete="off" required>
+                            </div>
+                            <div class="form-row">
+                                <input type="text" class="form-control form-control-custom" name="password" placeholder="Password" autocomplete="off" required>
+                            </div>
+                            <div class="form-row">
+                                <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" autocomplete="off">
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-3">Add Password</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-links">
+                {% if session.role == 'admin' or session.role == 'manager' %}
+                <div class="action-row">
+                    <a href="{{ url_for('create_user_route') }}" class="btn btn-primary">Create New User</a>
+                    <a href="{{ url_for('view_users_route')}}" class="btn btn-primary">View Users</a>
+                </div>
                 {% endif %}
-
-                <h3>Add New Password</h3>
-                <form action="{{ url_for('add_password_route') }}" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="text" name="service" placeholder="Service Name" autocomplete="off" required>
-                    <input type="text" name="username" placeholder="Username" autocomplete="off" required>
-                    <input type="text" name="password" placeholder="Password" autocomplete="off" required>
-                    <input type="text" name="notes" placeholder="Notes" autocomplete="off">
-                    <br>
-                    <button type="submit">Add Password</button>
-                </form>
-            </section>
-
-            {% if session.role == 'admin' or session.role == 'manager' %}
-                <section id="user-management">
-                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
-                    <a href="{{ url_for('view_users_route')}}">View Users</a>
-                </section>
-            {% endif %}
-            {% if session.role == 'admin' %}
-                <br>
-                <section id="log_viewer">
-                    <a href="{{ url_for('audit_log_viewer_route') }}">View Audit Logs</a>
-                </section>
-            {% endif %}
-
-            <section id="logout">
-                <a href="/logout">Logout</a>
-            </section>
+                {% if session.role == 'admin' %}
+                <div class="action-row">
+                    <a href="{{ url_for('audit_log_viewer_route') }}" class="btn btn-warning">View Audit Logs</a>
+                </div>
+                {% endif %}
+                <div class="action-row">
+                    <a href="/logout" class="btn btn-danger">Logout</a>
+                </div>
+            </div>
         </main>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="{{ url_for('static', filename='bootstrap/js/bootstrap.min.js') }}"></script>
     </body>
 </html>

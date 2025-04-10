@@ -2,9 +2,11 @@ body {
     font-family: Arial, sans-serif;
     background-color: #f4f4f4;
     color: #333;
-    width: 80%;
-    margin: 0 auto;
+    margin: 0;
     padding: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
@@ -15,6 +17,10 @@ header {
 }
 
 main {
+    flex: 1;
+    width: 80%;
+    max-width: 1200px;
+    margin: 0 auto;
     padding: 20px;
     text-align: center;
 }
@@ -43,6 +49,13 @@ form {
     max-width: 300px;
     margin: 0 auto;
     margin-top: 10px;
+}
+
+.add_password {
+    margin-top: 10px;
+    padding: 10px;
+    border: solid 1px #ddd !important;
+    border-radius: 8px;
 }
 
 ul {

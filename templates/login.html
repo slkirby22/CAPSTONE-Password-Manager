@@ -1,31 +1,43 @@
 <html>
     <head>
         <title>Login</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
         <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
     </head>
-    <body>
+    <body class="bg-light">
         <header>
-            <h1>Login</h1>
-        </header>
-        <main>
-            <form action="/login" method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <label for="username">Username:</label>
-                <input type="text" id="username" name="username" autocomplete="off" required><br><br>
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" autocomplete="off" required><br><br>
-                <input type="submit" value="Login">
-            </form>
-
             <div>
-                <button type="button" id="password-toggle">Show Password</button>
+                <h1>Login</h1>
             </div>
+        </header>
+        <main class="main-container">
+            <div class="card card-centered">
+                <div class="card-body">
+                    <form action="/login" method="post" class="text-center">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-row mb-3">
+                            <label for="username" class="form-label">Username:</label>
+                            <input type="text" class="form-control form-control-custom" id="username" name="username" autocomplete="off" required>
+                        </div>
+                        <div class="form-row mb-4">
+                            <label for="password" class="form-label">Password:</label>
+                            <input type="password" class="form-control form-control-custom" id="password" name="password" autocomplete="off" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary mb-3">Login</button>
+                    </form>
 
-            {% if error %}
-                <p class="error">{{ error }}</p>
-            {% endif %}
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-outline-secondary" id="password-toggle">Show Password</button>
+                    </div>
 
+                    {% if error %}
+                        <p class="error text-center mt-3">{{ error }}</p>
+                    {% endif %}
+                </div>
+            </div>
         </main>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="{{ url_for('static', filename='bootstrap/js/bootstrap.min.js') }}"></script>
     </body>
 </html>

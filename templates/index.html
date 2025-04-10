@@ -1,31 +1,38 @@
 <html>
     <head>
         <title>Enterprise Password Manager</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
         <script>
             window.onbeforeunload = function() {
                 fetch('/logout');
             }
         </script>
+        <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
     </head>
     <body>
         <header>
-            <h1>Welcome to the Enterprise Password Manager</h1>
+            <div class="header-content">
+                <h1>Welcome to the Enterprise Password Manager</h1>
+            </div>
         </header>
 
         <main>
-            <section>
-                <p>This is the central hub for managing and securing your company's passwords.</p>
-                <p>To get started, please log in.</p>
-            </section>
+            <div class="centered-container">
+                <section class="intro-section">
+                    <p>This is the central hub for managing and securing your company's passwords.</p>
+                    <p>To get started, please log in.</p>
+                </section>
 
-            <section>
-                <a href="{{ url_for('login_route') }}">Login</a>
-            </section>
+                <section class="action-section">
+                    <a href="{{ url_for('login_route') }}" class="btn btn-primary">Login</a>
+                </section>
+            </div>
         </main>
 
         <footer>
             <p>&copy; 2025 Seth Kirby. All rights reserved</p>
         </footer>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="{{ url_for('static', filename='bootstrap/js/bootstrap.min.js') }}"></script>
     </body>
 </html>

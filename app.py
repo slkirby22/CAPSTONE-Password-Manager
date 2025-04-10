@@ -11,8 +11,10 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWTManager
+from flask_bootstrap import Bootstrap
 
 app = Flask(__name__)
+Bootstrap(app)
 csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address)
 # db = SQLAlchemy(app)
@@ -57,7 +59,11 @@ def ensure_db_exists():
 
 @app.after_request
 def apply_csp(response):
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'"
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://code.jquery.com https://stackpath.bootstrapcdn.com; "
+        "style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com;"
+    )
     return response
 def apply_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -80,7 +86,7 @@ def login_route():
 def dashboard_route():
     return dashboard()
 
-@app.route('/select_password_for_edit', methods=['GET'])
+@app.route('/select_password_for_edit', methods=['GET', 'POST'])
 def select_password_for_edit_route():
     return select_password_for_edit()
 

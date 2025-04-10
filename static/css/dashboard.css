@@ -1,0 +1,52 @@
+.header-height {
+    height: 80px;
+    display: flex;
+    align-items: center;
+}
+
+.main-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.card-centered {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto 30px;
+}
+
+.password-form {
+    border: 1px solid #ddd !important;
+    border-radius: 8px;
+    padding: 25px;
+    margin: 30px auto;
+    background: white;
+    width: 100%;
+    max-width: 500px;
+}
+
+.form-row {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.form-control-custom {
+    width: 200px !important;
+    margin: 0 auto;
+}
+
+.action-links {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.action-row {
+    display: flex;
+    gap: 15px;
+}
