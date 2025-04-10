@@ -81,10 +81,17 @@ def dashboard():
         user_role = current_user.role
         user_passwords = Password.query.filter_by(user_id=current_user.id).all()
 
-        for password_entry in user_passwords:
-            password_entry.password = cipher_suite.decrypt(password_entry.password).decode()
-    
-        return render_template('dashboard.html', user_role=user_role, passwords=user_passwords)
+        decrypted_passwords = []
+        for pw in user_passwords:
+            decrypted_passwords.append({
+                'id': pw.id,
+                'service_name': pw.service_name,
+                'username': pw.username,
+                'password': cipher_suite.decrypt(pw.password).decode(),  # Decrypt here
+                'notes': pw.notes
+            })
+
+        return render_template('dashboard.html', passwords=decrypted_passwords)
     else:
         return redirect(url_for('index_route'))
 
@@ -108,14 +115,24 @@ def select_password_for_edit():
         selected_password = Password.query.filter_by(user_id=current_user.id, service_name=service_name).first()
 
         if selected_password:
-            # Decrypt the password
-            selected_password.password = cipher_suite.decrypt(selected_password.password).decode()
-
-            # Fetch all passwords for the dropdown list
+            
             user_passwords = Password.query.filter_by(user_id=current_user.id).all()
-
-            # Render the dashboard with the selected password and all passwords
-            return render_template('dashboard.html', selected_password=selected_password, passwords=user_passwords)
+            
+            # Decrypt the password
+            decrypted_password = cipher_suite.decrypt(selected_password.password).decode()
+            
+            # Pass decrypted data to template
+            return render_template(
+                'dashboard.html',
+                selected_password={
+                    'id': selected_password.id,
+                    'service_name': selected_password.service_name,
+                    'username': selected_password.username,
+                    'password': decrypted_password,
+                    'notes': selected_password.notes
+                },
+                passwords=user_passwords
+            )
         else:
             return redirect(url_for('dashboard_route'))
     else:
