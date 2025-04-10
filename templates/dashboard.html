@@ -33,9 +33,12 @@
 
                     {% if selected_password %}
                         <div class="password-form">
-                            <form action="{{ url_for('select_password_for_edit_route', service=selected_password.service_name) }}" method="POST">
+                            <form action="{{ url_for('update_password_route', service=selected_password.service_name) }}" method="POST">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
+                                <div class="form-row">
+                                    <label for="service" class="form-label"><h3>Service: {{selected_password.service_name}}</h3></label>
+                                </div>
                                 <div class="form-row">
                                     <label for="username" class="form-label">Username:</label>
                                     <input type="text" class="form-control form-control-custom" name="username" placeholder="New username" value="{{ selected_password.username }}" autocomplete="off" required>

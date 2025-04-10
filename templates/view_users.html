@@ -5,6 +5,9 @@
         <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
     </head>
     <body>
+        <header>
+            <h1>View Users</h1>
+        </header>
         <main>
             <section>
                 <h3>Select a User to Edit:</h3>
@@ -19,12 +22,12 @@
                             {% endif %}
                         {% endfor %}
                     </select>
-                    <button type="submit">Edit Selected User</button>
+                    <button type="submit" class="btn btn-primary">Edit Selected User</button>
                 </form>
             </section>
 
             {% if selected_user %}
-            <section>
+            <section class="user-details">
                 <h3>Edit User Details:</h3>
                 <form action="{{ url_for('update_user_route', user_id=selected_user.id) }}" method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -51,14 +54,14 @@
                         <label>Role: {{ selected_user.role }}</label><br>
                     {% endif %}
 
-                    <button type="submit">Update User</button>
+                    <button type="submit" class="btn btn-warning">Update User</button>
                 </form>
 
                 {% if session.username != selected_user.username %}
                 <form action="{{ url_for('delete_user_route', user_id=selected_user.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="user_id" value="{{ selected_user.id }}">
-                    <button type="submit">Delete</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
                 {% endif %}
 
@@ -67,7 +70,7 @@
                         <form action="{{ url_for('unlock_account_route', user_id=selected_user.id) }}" method="post">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="user_id" value="{{ selected_user.id }}">
-                            <button type="submit">Unlock Account</button>
+                            <button type="submit" class="btn btn-warning">Unlock Account</button>
                         </form>
                     {% endif %}
                 {% endif %}
@@ -86,16 +89,16 @@
             </section>
             {% endif %}
 
-
-            <section id="user-management">
-                {% if user_role == 'manager' or 'admin' %}
-                    <a href="{{ url_for('create_user_route') }}">Create New User</a>
-                {% endif %}
-            </section>
-
-            <section id="back-to-dashboard">
-                <a href="{{ url_for('dashboard_route') }}">Back to Dashboard</a>
-            </section>
+            <div id="view-users-button-container">
+                <section id="user-management">
+                    {% if user_role == 'manager' or 'admin' %}
+                        <a href="{{ url_for('create_user_route') }}" class="btn btn-primary">Create New User</a>
+                    {% endif %}
+                </section>
+                <section id="back-to-dashboard">
+                    <a href="{{ url_for('dashboard_route') }}" class="btn btn-warning">Back to Dashboard</a>
+                </section>
+            </div>
         </main>
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="{{ url_for('static', filename='bootstrap/js/bootstrap.min.js') }}"></script>

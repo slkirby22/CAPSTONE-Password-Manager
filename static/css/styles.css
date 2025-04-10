@@ -110,6 +110,17 @@ th, td {
     border-collapse: collapse;
 }
 
+.user-details {
+    margin-top: 10px;
+    padding: 10px;
+    border: solid 1px #ddd !important;
+    border-radius: 8px;
+}
+
+#view-users-button-container {
+    text-align: center;
+}
+
 footer {
     text-align: center;
     padding: 10px;
