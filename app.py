@@ -12,12 +12,25 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWTManager
 from flask_bootstrap import Bootstrap
+from flask_cors import CORS
 
 app = Flask(__name__)
 Bootstrap(app)
 csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address)
-# db = SQLAlchemy(app)
+cors = CORS(app, 
+    resources={
+        r"/api/*": {
+            "origins": [
+                "http://localhost:8081",  # Mobile app domain
+            ],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,
+            "max_age": 86400
+        }
+    }
+)
 
 def load_key():
     try:
@@ -142,7 +155,7 @@ def get_audit_logs_route():
 # API Routes
 @app.route('/api/login', methods=['POST'])
 @csrf.exempt 
-@limiter.limit("5 per minute")
+@limiter.limit("10 per minute")
 def api_login():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
