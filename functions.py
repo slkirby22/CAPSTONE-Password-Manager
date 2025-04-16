@@ -10,8 +10,8 @@ pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
 
 def index():
-    if 'user_id' in session:
-        return redirect(url_for('dashboard_route'))
+    # if 'user_id' in session:
+    #     return redirect(url_for('dashboard_route'))
     return render_template('index.html')
 
 
@@ -31,6 +31,9 @@ def log_event(message, event_type, user_id=None):
 
 
 def login():
+    if 'user_id' in session:
+        return redirect(url_for('dashboard_route'))
+    
     if request.method == 'POST':
         username = request.form['username'].upper()
         password = request.form['password']
@@ -141,8 +144,16 @@ def select_password_for_edit():
 
 def logout():
     user_id = session.get('user_id')
-    log_event(f"User {session['username']} logged out.", "USER_LOGOUT", user_id)
+    username = session.get('username')
+    
+    if session.get('user_id'):
+        log_event(f"User {username} logged out.", "USER_LOGOUT", user_id)
+   
+    # Clear session after logging the event to avoid issues with logging.
     session.pop('user_id', None)
+    session.pop('username', None)
+    session.pop('role', None)
+    
     return redirect(url_for('index_route'))
 
 
@@ -457,7 +468,7 @@ def audit_log_viewer():
     
     log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
 
-    default_start_date = datetime.now(est) - timedelta(days=7)
+    default_start_date = datetime.now(est) - timedelta(days=1)
     audit_logs = audit_log.query.filter(audit_log.event_time >= default_start_date).all()
 
     return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role, default_start_date=default_start_date.strftime('%Y-%m-%d'))

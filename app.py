@@ -65,7 +65,6 @@ db.init_app(app)
 def ensure_db_exists():
     try:
         User.query.limit(1).first()
-        print("Database connection established.")
     except Exception as e:
         print(f"Error connecting to the database {e}")
         raise
@@ -88,7 +87,6 @@ def apply_security_headers(response):
 @app.route('/')
 def index_route():
     return index()
-
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute")
