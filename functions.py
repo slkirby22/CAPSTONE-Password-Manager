@@ -10,8 +10,6 @@ pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
 
 def index():
-    # if 'user_id' in session:
-    #     return redirect(url_for('dashboard_route'))
     return render_template('index.html')
 
 
@@ -31,9 +29,11 @@ def log_event(message, event_type, user_id=None):
 
 
 def login():
+    # Check if user is already logged in
     if 'user_id' in session:
         return redirect(url_for('dashboard_route'))
     
+    # Handle login form submission
     if request.method == 'POST':
         username = request.form['username'].upper()
         password = request.form['password']
@@ -41,6 +41,7 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user:
+            # Check if the account is locked
             if user.failed_login_attempts <= 3:
                 try:
                     if pwd_context.verify(password, user.password):
@@ -80,6 +81,7 @@ def dashboard():
 
     current_user = User.query.filter_by(id=session['user_id']).first()
 
+    # Display the dashboard with decrypted passwords if the user is found
     if current_user:
         user_role = current_user.role
         user_passwords = Password.query.filter_by(user_id=current_user.id).all()
@@ -146,6 +148,7 @@ def logout():
     user_id = session.get('user_id')
     username = session.get('username')
     
+    # Only log event if a user_id exists in the session
     if session.get('user_id'):
         log_event(f"User {username} logged out.", "USER_LOGOUT", user_id)
    
@@ -173,6 +176,7 @@ def create_user():
         password = request.form['password']
         role = request.form['role']
 
+        # Password Policies
         if len(password) < 8:
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
             return render_template('create_user.html', error="Password must be at least 8 characters long.", usernmame=username, role=role)
@@ -186,8 +190,10 @@ def create_user():
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
             return render_template('create_user.html', error="Password must contain at least one uppercase letter.", usernmame=username, role=role)
 
+        # Hash the password before storing it
         password = pwd_context.hash(password)
 
+        # On;y allow certain roles based on the current user's role
         if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
             return render_template('create_user.html', error="Invalid role, please try again.")
         if current_user_role == 'manager' and role not in ['employee']:
@@ -196,6 +202,7 @@ def create_user():
         if User.query.filter_by(username=username).first():
             return render_template('create_user.html', error="User already exists, please try again.")
         
+        # Commit the new user to the database
         new_user = User(username=username, password=password, role=role)
         db.session.add(new_user)
         db.session.commit()
@@ -211,6 +218,7 @@ def view_users():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
 
@@ -235,6 +243,7 @@ def select_user_for_edit():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
 
@@ -258,6 +267,7 @@ def update_user(user_id):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
 
@@ -265,6 +275,7 @@ def update_user(user_id):
         log_event(f"User {current_user.username} attempted to update a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to update users."))
     
+    # Fetch the user to be updated
     db_user = User.query.filter_by(id=user_id).first()
 
     # Make sure the form is passed correctly
@@ -333,20 +344,20 @@ def delete_user(user_id):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
-    print(current_user_role)
     
     if current_user_role not in ['admin', 'manager']:
         log_event(f"User {current_user.username} attempted to delete a user.", "UNAUTHORIZED_ACTION", current_user.id)
         return redirect(url_for('dashboard_route', error="You are not authorized to delete users."))
 
+    # Fetch the user to be deleted
     db_user = User.query.filter_by(id=user_id).first()
-    print(db_user)
 
     if db_user:
+        # Delete all passwords associated with the user
         user_passwords = Password.query.filter_by(user_id=user_id).all()
-        print(user_passwords)
 
         for password in user_passwords:
             db.session.delete(password)
@@ -365,6 +376,7 @@ def unlock_account(user_id):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    # Find the user to unlock
     db_user = User.query.filter_by(id=user_id).first()
 
     if db_user:
@@ -391,13 +403,16 @@ def add_password():
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
 
+    # Get the form data
     service = request.form['service']
     password = request.form['password']
     new_username = request.form['username']
     notes = request.form['notes']
 
+    # Get the current user
     current_user = User.query.filter_by(id=session['user_id']).first()
 
+    # Encrypt the password and commit it to the database
     if current_user:
 
         encrypted_password = cipher_suite.encrypt(password.encode())
@@ -412,6 +427,10 @@ def add_password():
 
 
 def update_password(service):
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+
+    # Get the form data
     password_id = request.form.get('pw_id')
     username = request.form.get('username')
     password = request.form.get('password')
@@ -442,10 +461,11 @@ def delete_password(service):
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    # Get the password ID from the form and find it in the database
     password_id = request.form['pw_id']
-
     password_entry = Password.query.filter_by(id=password_id).first()
 
+    # Delete the password entry if it exists
     if password_entry:
         db.session.delete(password_entry)
         db.session.commit()
@@ -459,6 +479,7 @@ def audit_log_viewer():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
     
+    # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
     current_user_role = current_user.role
 
@@ -468,6 +489,7 @@ def audit_log_viewer():
     
     log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
 
+    # Only show the past day of logs by default
     default_start_date = datetime.now(est) - timedelta(days=1)
     audit_logs = audit_log.query.filter(audit_log.event_time >= default_start_date).all()
 
@@ -475,6 +497,7 @@ def audit_log_viewer():
 
 
 def get_audit_logs():
+    # Get the start and end dates from the request
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
@@ -484,6 +507,7 @@ def get_audit_logs():
     if end_date:
         query = query.filter(audit_log.event_time <= end_date)
 
+    # Fetch the logs from the database and return them as JSON
     logs = query.all()
     return jsonify([{
         'id': log.id,

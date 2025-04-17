@@ -14,6 +14,8 @@ from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWT
 from flask_bootstrap import Bootstrap
 from flask_cors import CORS
 
+
+# Initialize Flask app, extensions, and configuration
 app = Flask(__name__)
 Bootstrap(app)
 csrf = CSRFProtect(app)
@@ -40,7 +42,9 @@ def load_key():
         log_event("Encryption key file not found.", "error", 0)
         raise
 
+# First option for MySQL
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
+# Second option for SQL Server
 # app.config['SQLALCHEMY_DATABASE_URI'] = (
 #     'mssql+pyodbc://pm_server:pwmanager@localhost/password_manager?'
 #     'driver=ODBC+Driver+17+for+SQL+Server&'
@@ -84,6 +88,8 @@ def apply_security_headers(response):
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 
+
+# Routes for Web App
 @app.route('/')
 def index_route():
     return index()
@@ -150,7 +156,7 @@ def get_audit_logs_route():
     return get_audit_logs()
 
 
-# API Routes
+# API Routes for Mobile App
 @app.route('/api/login', methods=['POST'])
 @csrf.exempt 
 @limiter.limit("10 per minute")
@@ -196,7 +202,7 @@ def api_dashboard():
         return jsonify({"error": "Unauthorized"}), 401
     user_id = get_jwt_identity()
     
-    data = get_dashboard_data(user_id)  # Calls API function
+    data = get_dashboard_data(user_id)
     if not data:
         return jsonify({"error": "User not found"}), 404
     

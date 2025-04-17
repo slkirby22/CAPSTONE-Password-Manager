@@ -6,6 +6,7 @@ est = pytz.timezone('US/Eastern')
 
 db = SQLAlchemy()
 
+# Class models for User, Password, Audit Log, adnd Token Blacklist
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(255), unique=True, nullable=False)
