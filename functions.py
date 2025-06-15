@@ -179,21 +179,21 @@ def create_user():
         # Password Policies
         if len(password) < 8:
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('create_user.html', error="Password must be at least 8 characters long.", usernmame=username, role=role)
+            return render_template('create_user.html', error="Password must be at least 8 characters long.", username=username, role=role)
         if not re.search(r"\d", password):
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('create_user.html', error="Password must contain at least one number.", usernmame=username, role=role)
+            return render_template('create_user.html', error="Password must contain at least one number.", username=username, role=role)
         if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('create_user.html', error="Password must contain at least one special character.", usernmame=username, role=role)
+            return render_template('create_user.html', error="Password must contain at least one special character.", username=username, role=role)
         if not re.search(r"[A-Z]", password):
             log_event(f"{current_user.username} attempted to create a user with an invalid password.", "INVALID_PASSWORD", current_user.id)
-            return render_template('create_user.html', error="Password must contain at least one uppercase letter.", usernmame=username, role=role)
+            return render_template('create_user.html', error="Password must contain at least one uppercase letter.", username=username, role=role)
 
         # Hash the password before storing it
         password = pwd_context.hash(password)
 
-        # On;y allow certain roles based on the current user's role
+        # Only allow certain roles based on the current user's role
         if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
             return render_template('create_user.html', error="Invalid role, please try again.")
         if current_user_role == 'manager' and role not in ['employee']:
