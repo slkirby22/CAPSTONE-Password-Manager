@@ -313,7 +313,7 @@ def update_user(user_id):
         return render_template('view_users.html', error="Username taken, please try again.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
 
     # Determine if user is updating their own account or someone else's
-    if session['user_id'] != user_id:
+    if session['user_id'] != int(user_id):
         new_role = request.form.get('role', db_user.role)  # Role comes from the form
     else:
         new_role = current_user_role  # Keep the current role for self updates
