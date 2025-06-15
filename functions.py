@@ -193,7 +193,7 @@ def create_user():
         # Hash the password before storing it
         password = pwd_context.hash(password)
 
-        # On;y allow certain roles based on the current user's role
+        # Only allow certain roles based on the current user's role
         if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
             return render_template('create_user.html', error="Invalid role, please try again.")
         if current_user_role == 'manager' and role not in ['employee']:
