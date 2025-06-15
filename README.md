@@ -63,6 +63,18 @@ http://localhost:5000
 8. Schedule regular backups of your database and application files to prevent data loss.
 9. Protect the server by configuring a firewall and applying security rules to restrict unwanted traffic.
 10. Regularly update your Python packages and dependencies to patch security vulnerabilities.
+## Development
+
+Run the test suite with:
+```bash
+pytest
+```
+
+Example output:
+```
+3 passed in 0.59s
+```
+
 
 
 ## Contact
