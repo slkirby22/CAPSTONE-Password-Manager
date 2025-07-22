@@ -1,13 +1,10 @@
 import os, sys
+from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Ensure environment variables expected by the application are present
+load_dotenv()
 os.environ.setdefault('JWT_SECRET_KEY', 'test-secret')
-os.environ.setdefault('DB_USER', 'root')
-os.environ.setdefault('DB_PASSWORD', 'root')
-os.environ.setdefault('DB_HOST', 'localhost')
-os.environ.setdefault('DB_NAME', 'password_manager')
-os.environ.setdefault('DB_TYPE', 'mysql')
 import pytest
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager

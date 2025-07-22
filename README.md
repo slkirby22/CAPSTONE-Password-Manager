@@ -44,7 +44,7 @@ Set up the database using the provided SQL scripts or configuration files.
 
 ### Environment Variables
 
-The application reads database credentials and the JWT secret key from the environment. The following variables are supported with their default values:
+Create a `.env` file in the project root or set the variables manually. The application uses [python-dotenv](https://pypi.org/project/python-dotenv/) to load these values at startup. Example variables and their defaults are shown below:
 
 | Variable | Default |
 | --- | --- |

@@ -13,9 +13,11 @@ from flask_wtf.csrf import CSRFProtect
 from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWTManager
 from flask_bootstrap import Bootstrap
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 
 # Initialize Flask app, extensions, and configuration
+load_dotenv()
 app = Flask(__name__)
 Bootstrap(app)
 csrf = CSRFProtect(app)
