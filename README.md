@@ -39,15 +39,20 @@ Ensure you have Python installed. Then, install the required Python packages:
     ```bash
     pip install -r requirements.txt
 
-4. **Configure the Database:**
+4. **Generate the Encryption Key:**
+Run the following command to create `secret.key`:
+    ```bash
+    python keygen.py
+    ```
+5. **Configure the Database:**
 Set up the database using the provided SQL scripts or configuration files.
 
-5. **Run the Application:**
+6. **Run the Application:**
 Start the application locally:
     ```bash
     python app.py
 
-6. **Access the Application:**
+7. **Access the Application:**
 Open your web browser and navigate to:
 http://localhost:5000
 
