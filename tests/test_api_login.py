@@ -1,5 +1,10 @@
 import os, sys
+from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Ensure environment variables expected by the application are present
+load_dotenv()
+os.environ.setdefault('JWT_SECRET_KEY', 'test-secret')
 import pytest
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager
@@ -12,7 +17,7 @@ def create_test_app():
     app.config.update({
         'TESTING': True,
         'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
-        'JWT_SECRET_KEY': 'test-secret'
+        'JWT_SECRET_KEY': os.environ['JWT_SECRET_KEY']
     })
     JWTManager(app)
     db.init_app(app)

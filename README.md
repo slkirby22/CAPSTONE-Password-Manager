@@ -47,12 +47,24 @@ Run the following command to create `secret.key`:
 5. **Configure the Database:**
 Set up the database using the provided SQL scripts or configuration files.
 
-6. **Run the Application:**
+6. **Environment Variables**
+Create a `.env` file in the project root or set the variables manually. The application uses [python-dotenv](https://pypi.org/project/python-dotenv/) to load these values at startup. Example variables and their defaults are shown below:
+
+| Variable | Default |
+| --- | --- |
+| `DB_USER` | `root` |
+| `DB_PASSWORD` | `root` |
+| `DB_HOST` | `localhost` |
+| `DB_NAME` | `password_manager` |
+| `DB_TYPE` | `mysql` |
+| `JWT_SECRET_KEY` | `your-256-bit-secret` |
+
+7. **Run the Application:**
 Start the application locally:
     ```bash
     python app.py
 
-7. **Access the Application:**
+8. **Access the Application:**
 Open your web browser and navigate to:
 http://localhost:5000
 
