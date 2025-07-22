@@ -42,22 +42,30 @@ def load_key():
         log_event("Encryption key file not found.", "error", 0)
         raise
 
-# First option for MySQL
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:root@localhost/password_manager'
-# Second option for SQL Server
-# app.config['SQLALCHEMY_DATABASE_URI'] = (
-#     'mssql+pyodbc://pm_server:pwmanager@localhost/password_manager?'
-#     'driver=ODBC+Driver+17+for+SQL+Server&'
-#     'autocommit=True&'
-#     'TrustServerCertificate=yes'  # For development only
-# )
+# Configure database connection from environment variables
+db_user = os.environ.get('DB_USER', 'root')
+db_password = os.environ.get('DB_PASSWORD', 'root')
+db_host = os.environ.get('DB_HOST', 'localhost')
+db_name = os.environ.get('DB_NAME', 'password_manager')
+db_type = os.environ.get('DB_TYPE', 'mysql')
+
+if db_type.lower() == 'mssql':
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        f"mssql+pyodbc://{db_user}:{db_password}@{db_host}/{db_name}?"
+        "driver=ODBC+Driver+17+for+SQL+Server&"
+        "autocommit=True&"
+        "TrustServerCertificate=yes"
+    )
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        f"mysql://{db_user}:{db_password}@{db_host}/{db_name}")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['JWT_SECRET_KEY'] = 'your-256-bit-secret'  # Change this!
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-256-bit-secret')
 app.config['JWT_TOKEN_LOCATION'] = ['headers']  # Look for JWT in headers
 
 jwt = JWTManager(app)

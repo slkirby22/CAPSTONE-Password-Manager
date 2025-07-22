@@ -42,6 +42,19 @@ Ensure you have Python installed. Then, install the required Python packages:
 4. **Configure the Database:**
 Set up the database using the provided SQL scripts or configuration files.
 
+### Environment Variables
+
+The application reads database credentials and the JWT secret key from the environment. The following variables are supported with their default values:
+
+| Variable | Default |
+| --- | --- |
+| `DB_USER` | `root` |
+| `DB_PASSWORD` | `root` |
+| `DB_HOST` | `localhost` |
+| `DB_NAME` | `password_manager` |
+| `DB_TYPE` | `mysql` |
+| `JWT_SECRET_KEY` | `your-256-bit-secret` |
+
 5. **Run the Application:**
 Start the application locally:
     ```bash

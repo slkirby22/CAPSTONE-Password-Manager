@@ -1,3 +1,11 @@
+import os
+
+os.environ.setdefault('DB_USER', 'root')
+os.environ.setdefault('DB_PASSWORD', 'root')
+os.environ.setdefault('DB_HOST', 'localhost')
+os.environ.setdefault('DB_NAME', 'password_manager')
+os.environ.setdefault('DB_TYPE', 'mysql')
+
 from app import app
 from models import db, User, Password
 
