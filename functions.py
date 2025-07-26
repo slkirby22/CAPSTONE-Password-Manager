@@ -9,6 +9,19 @@ import pytz
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
 
+# Helper for password policy checks
+def password_meets_requirements(password: str) -> bool:
+    """Return True if the password satisfies complexity rules."""
+    if len(password) < 8:
+        return False
+    if not re.search(r"\d", password):
+        return False
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    return True
+
 def index():
     return render_template('index.html')
 
@@ -83,6 +96,8 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
 
+    error_msg = request.args.get('error')
+
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
 
@@ -103,7 +118,7 @@ def dashboard():
                 'notes': pw.notes
             })
 
-        return render_template('dashboard.html', passwords=decrypted_passwords)
+        return render_template('dashboard.html', passwords=decrypted_passwords, error=error_msg)
     else:
         return redirect(url_for('index_route'))
 
@@ -113,6 +128,7 @@ def select_password_for_edit():
         return redirect(url_for('index_route'))
 
     service_name = request.args.get('service_name')
+    error_msg = request.args.get('error')
     
     if not service_name:
         return redirect(url_for('dashboard_route'))
@@ -143,7 +159,8 @@ def select_password_for_edit():
                     'password': decrypted_password,
                     'notes': selected_password.notes
                 },
-                passwords=user_passwords
+                passwords=user_passwords,
+                error=error_msg
             )
         else:
             return redirect(url_for('dashboard_route'))
@@ -419,8 +436,10 @@ def add_password():
     # Get the current user
     current_user = User.query.filter_by(id=session['user_id']).first()
 
-    # Encrypt the password and commit it to the database
     if current_user:
+        if not password_meets_requirements(password):
+            log_event(f"User {current_user.username} attempted to add weak password.", "INVALID_PASSWORD", current_user.id)
+            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
 
         encrypted_password = cipher_suite.encrypt(password.encode())
 
@@ -447,9 +466,12 @@ def update_password(service):
     password_to_update = Password.query.filter_by(id=password_id).first()
 
     if password_to_update:
+        if not password_meets_requirements(password):
+            log_event("Weak password rejected during update.", "INVALID_PASSWORD", session.get('user_id'))
+            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
+
         # Update the password's fields
         password_to_update.username = username
-        password_to_update.password = password
         password_to_update.notes = notes
 
         # Encrypt the password before saving it back to the database
