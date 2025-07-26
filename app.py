@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from functions import index, login, dashboard, select_password_for_edit, logout, create_user, view_users, select_user_for_edit, update_user, delete_user, unlock_account, lock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
+from functions import index, login, dashboard, select_password_for_edit, logout, create_user, view_users, select_user_for_edit, update_user, delete_user, unlock_account, lock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs, search_user
 from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token, add_password_api, update_password_api, delete_password_api
 from models import db, User, Password, TokenBlacklist
 import os
@@ -166,6 +166,10 @@ def unlock_account_route(user_id):
 @app.route('/lock_account/<user_id>', methods=['POST'])
 def lock_account_route(user_id):
     return lock_account(user_id)
+
+@app.route('/search_user')
+def search_user_route():
+    return search_user()
 
 @app.route('/add_password', methods=['POST'])
 def add_password_route():
