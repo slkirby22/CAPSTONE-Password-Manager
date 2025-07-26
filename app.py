@@ -64,7 +64,8 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+session_timeout = int(os.environ.get('SESSION_TIMEOUT_MINUTES', '15'))
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=session_timeout)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-256-bit-secret')
