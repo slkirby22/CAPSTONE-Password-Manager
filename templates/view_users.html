@@ -73,6 +73,11 @@
                             <input type="hidden" name="user_id" value="{{ selected_user.id }}">
                             <button type="submit" class="btn btn-warning">Unlock Account</button>
                         </form>
+                        <form action="{{ url_for('lock_account_route', user_id=selected_user.id) }}" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+                            <button type="submit" class="btn btn-warning">Lock Account</button>
+                        </form>
                     {% endif %}
                 {% endif %}
 
