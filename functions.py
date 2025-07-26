@@ -40,6 +40,7 @@ def login():
 
         user = User.query.filter_by(username=username).first()
 
+        error_message = "Invalid username or password"
         if user:
             # Check if the account is locked
             if user.failed_login_attempts <= 3:
@@ -59,15 +60,20 @@ def login():
                         log_event(f"Failed login attempt for user {user.username}.", "FAILED_LOGIN", user.id)
                         user.failed_login_attempts += 1
                         db.session.commit()
-                        return render_template('login.html', error="Invalid password, please try again.")
-                        
+                        return render_template('login.html', error=error_message)
+
                 except Exception as e:
                     print(f"Error verifying password: {e}")
+                    return render_template('login.html', error=error_message)
             else:
-                log_event(f"Account locked for user {user.username} due to too many failed login attempts.", "ACCOUNT_LOCKED", user.id)
-                return render_template('login.html', error="Account locked due to too many failed login attempts.")
+                log_event(
+                    f"Account locked for user {user.username} due to too many failed login attempts.",
+                    "ACCOUNT_LOCKED",
+                    user.id,
+                )
+                return render_template('login.html', error=error_message)
         else:
-            return render_template('login.html', error="User not found, please try again.")
+            return render_template('login.html', error=error_message)
    
     return render_template('login.html')
 
