@@ -16,6 +16,9 @@
             <div class="card card-centered">
                 <div class="card-body text-center">
                     <h3 class="card-title">Your passwords:</h3>
+                    {% if error %}
+                        <p class="error">{{ error }}</p>
+                    {% endif %}
                     
                     <form action="{{ url_for('select_password_for_edit_route') }}" method="GET" class="mb-4">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -45,7 +48,8 @@
                                 </div>
                                 <div class="form-row">
                                     <label for="password" class="form-label">Password:</label>
-                                    <input type="password" class="form-control form-control-custom" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
+                                    <input type="password" class="form-control form-control-custom password-input" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
+                                    <small id="strength-password{{ selected_password.id }}" class="form-text"></small>
                                 </div>
                                 <div class="form-row">
                                     <label for="notes" class="form-label">Notes:</label>
@@ -79,7 +83,9 @@
                                 <input type="text" class="form-control form-control-custom" name="username" placeholder="Username" autocomplete="off" required>
                             </div>
                             <div class="form-row">
-                                <input type="text" class="form-control form-control-custom" name="password" placeholder="Password" autocomplete="off" required>
+                                <input type="text" class="form-control form-control-custom password-input" id="new-password" name="password" placeholder="Password" autocomplete="off" required>
+                                <button type="button" class="btn btn-secondary mt-2" id="generate-password">Generate</button>
+                                <small id="strength-new-password" class="form-text"></small>
                             </div>
                             <div class="form-row">
                                 <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" autocomplete="off">

@@ -64,7 +64,8 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ENCRYPTION_KEY'] = load_key()
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+session_timeout = int(os.environ.get('SESSION_TIMEOUT_MINUTES', '15'))
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=session_timeout)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-256-bit-secret')
@@ -91,11 +92,17 @@ def apply_csp(response):
         "style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com;"
     )
     return response
+
+@app.after_request
+def set_security_headers(response):
+    return apply_security_headers(response)
 def apply_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains'
+    response.headers['Session-Cookie-SameSite'] = 'Lax'
     return response
 
 

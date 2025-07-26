@@ -9,6 +9,19 @@ import pytz
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
 
+# Helper for password policy checks
+def password_meets_requirements(password: str) -> bool:
+    """Return True if the password satisfies complexity rules."""
+    if len(password) < 8:
+        return False
+    if not re.search(r"\d", password):
+        return False
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    return True
+
 def index():
     return render_template('index.html')
 
@@ -40,6 +53,7 @@ def login():
 
         user = User.query.filter_by(username=username).first()
 
+        error_message = "Invalid username or password"
         if user:
             # Check if the account is locked
             if user.failed_login_attempts <= 3:
@@ -48,6 +62,7 @@ def login():
                         session['username'] = user.username
                         session['user_id'] = user.id
                         session['role'] = user.role
+                        session.permanent = True
 
                         log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
 
@@ -59,15 +74,20 @@ def login():
                         log_event(f"Failed login attempt for user {user.username}.", "FAILED_LOGIN", user.id)
                         user.failed_login_attempts += 1
                         db.session.commit()
-                        return render_template('login.html', error="Invalid password, please try again.")
-                        
+                        return render_template('login.html', error=error_message)
+
                 except Exception as e:
                     print(f"Error verifying password: {e}")
+                    return render_template('login.html', error=error_message)
             else:
-                log_event(f"Account locked for user {user.username} due to too many failed login attempts.", "ACCOUNT_LOCKED", user.id)
-                return render_template('login.html', error="Account locked due to too many failed login attempts.")
+                log_event(
+                    f"Account locked for user {user.username} due to too many failed login attempts.",
+                    "ACCOUNT_LOCKED",
+                    user.id,
+                )
+                return render_template('login.html', error=error_message)
         else:
-            return render_template('login.html', error="User not found, please try again.")
+            return render_template('login.html', error=error_message)
    
     return render_template('login.html')
 
@@ -75,6 +95,8 @@ def login():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
+
+    error_msg = request.args.get('error')
 
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
@@ -98,9 +120,9 @@ def dashboard():
                 'password': cipher_suite.decrypt(pw.password).decode(),  # Decrypt here
                 'notes': pw.notes
             })
-
+            
         other_users = User.query.filter(User.id != current_user.id).all()
-        return render_template('dashboard.html', passwords=decrypted_passwords, all_users=other_users)
+        return render_template('dashboard.html', passwords=decrypted_passwords, all_users=other_users, error=error_msg)
     else:
         return redirect(url_for('index_route'))
 
@@ -110,6 +132,7 @@ def select_password_for_edit():
         return redirect(url_for('index_route'))
 
     service_name = request.args.get('service_name')
+    error_msg = request.args.get('error')
     
     if not service_name:
         return redirect(url_for('dashboard_route'))
@@ -152,6 +175,7 @@ def select_password_for_edit():
                 },
                 passwords=user_passwords,
                 all_users=other_users
+                error=error_msg
             )
         else:
             return redirect(url_for('dashboard_route'))
@@ -427,8 +451,10 @@ def add_password():
     # Get the current user
     current_user = User.query.filter_by(id=session['user_id']).first()
 
-    # Encrypt the password and commit it to the database
     if current_user:
+        if not password_meets_requirements(password):
+            log_event(f"User {current_user.username} attempted to add weak password.", "INVALID_PASSWORD", current_user.id)
+            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
 
         encrypted_password = cipher_suite.encrypt(password.encode())
 
@@ -460,9 +486,12 @@ def update_password(service):
         return redirect(url_for('dashboard_route'))
 
     if password_to_update:
+        if not password_meets_requirements(password):
+            log_event("Weak password rejected during update.", "INVALID_PASSWORD", session.get('user_id'))
+            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
+
         # Update the password's fields
         password_to_update.username = username
-        password_to_update.password = password
         password_to_update.notes = notes
         if shared_user_ids is not None:
             password_to_update.shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
