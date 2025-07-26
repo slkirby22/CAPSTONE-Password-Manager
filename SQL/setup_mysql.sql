@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS password (
     INDEX idx_user_id (user_id)
 );
 
+CREATE TABLE IF NOT EXISTS password_user (
+    password_id INT NOT NULL,
+    user_id INT NOT NULL,
+    PRIMARY KEY (password_id, user_id),
+    FOREIGN KEY (password_id) REFERENCES password(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

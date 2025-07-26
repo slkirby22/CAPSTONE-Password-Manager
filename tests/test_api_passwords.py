@@ -5,7 +5,7 @@ from flask import Flask
 from cryptography.fernet import Fernet
 
 from models import db, User, Password, audit_log
-from api_functions import add_password_api, update_password_api, delete_password_api, pwd_context
+from api_functions import add_password_api, update_password_api, delete_password_api, get_dashboard_data, pwd_context
 
 
 def create_test_app():
@@ -71,4 +71,39 @@ def test_delete_password_logs_event(app_ctx):
     log = audit_log.query.filter_by(event_type='API_PASSWORD_DELETE').first()
     assert log is not None
     assert log.user_id == user.id
+
+
+def test_shared_password_visible_via_api(app_ctx):
+    owner = User.query.filter_by(username='TESTUSER').first()
+    other = User(username='OTHER', password=pwd_context.hash('pw'), role='employee')
+    db.session.add(other)
+    db.session.commit()
+    res = add_password_api(owner.id, {
+        'service_name': 'shared',
+        'username': 'me',
+        'password': 'pw',
+        'shared_with': [other.id]
+    })
+    assert 'password_id' in res
+
+    data = get_dashboard_data(other.id)
+    assert len(data['passwords']) == 1
+    assert data['passwords'][0]['service_name'] == 'shared'
+
+
+def test_shared_user_cannot_update(app_ctx):
+    owner = User.query.filter_by(username='TESTUSER').first()
+    other = User(username='OTHER2', password=pwd_context.hash('pw'), role='employee')
+    db.session.add(other)
+    db.session.commit()
+    res = add_password_api(owner.id, {
+        'service_name': 's2',
+        'username': 'me',
+        'password': 'pw',
+        'shared_with': [other.id]
+    })
+    pid = res['password_id']
+    # Attempt update as shared user
+    result = update_password_api(other.id, pid, {'username': 'x'})
+    assert result['status_code'] == 404
 

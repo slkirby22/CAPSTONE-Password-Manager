@@ -6,6 +6,13 @@ est = pytz.timezone('US/Eastern')
 
 db = SQLAlchemy()
 
+# Association table for password sharing
+password_user = db.Table(
+    'password_user',
+    db.Column('password_id', db.Integer, db.ForeignKey('password.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
+)
+
 # Class models for User, Password, Audit Log, and Token Blacklist
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -28,13 +35,17 @@ class Password(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     user = db.relationship('User', backref=db.backref('passwords', lazy=True))
+    shared_users = db.relationship('User', secondary=password_user,
+                                   backref=db.backref('shared_passwords', lazy='dynamic'))
 
-    def __init__(self, service_name, username, password, notes, user_id):
+    def __init__(self, service_name, username, password, notes, user_id, shared_users=None):
         self.service_name = service_name
         self.username = username
         self.password = password
         self.notes = notes
         self.user_id = user_id
+        if shared_users:
+            self.shared_users = shared_users
 
 class audit_log(db.Model):
     __tablename__ = 'audit_log'

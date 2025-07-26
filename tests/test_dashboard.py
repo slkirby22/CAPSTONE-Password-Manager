@@ -35,11 +35,13 @@ def client():
     with app.app_context():
         db.create_all()
         user = User(username='DASHUSER', password=pwd_context.hash('pw'), role='employee')
-        db.session.add(user)
+        other = User(username='OTHER', password=pwd_context.hash('pw'), role='employee')
+        db.session.add_all([user, other])
         db.session.commit()
         cipher = Fernet(app.config['ENCRYPTION_KEY'])
         encrypted = cipher.encrypt(b'secretpw')
         pw = Password(service_name='email', username='user', password=encrypted, notes='', user_id=user.id)
+        pw.shared_users.append(other)
         db.session.add(pw)
         db.session.commit()
     with app.test_client() as client:
@@ -73,3 +75,23 @@ def test_dashboard_displays_passwords(client, monkeypatch):
     assert len(captured['context']['passwords']) == 1
     assert captured['context']['passwords'][0]['service_name'] == 'email'
     assert captured['context']['passwords'][0]['password'] == 'secretpw'
+
+
+def test_dashboard_shows_shared_password(client, monkeypatch):
+    client, app = client
+    captured = {}
+
+    def fake_render(template, **context):
+        captured['template'] = template
+        captured['context'] = context
+        return 'rendered'
+
+    monkeypatch.setattr('functions.render_template', fake_render)
+    with client.session_transaction() as sess:
+        sess['user_id'] = 2
+        sess['username'] = 'OTHER'
+        sess['role'] = 'employee'
+    response = client.get('/dashboard')
+    assert response.status_code == 200
+    assert len(captured['context']['passwords']) == 1
+    assert captured['context']['passwords'][0]['service_name'] == 'email'
