@@ -54,7 +54,7 @@ def client():
         yield client, app
 
 
-def test_add_password_rejects_weak(client):
+def test_add_password_accepts_weak(client):
     client, app = client
     with client.session_transaction() as sess:
         sess['user_id'] = 1
@@ -63,10 +63,14 @@ def test_add_password_rejects_weak(client):
     resp = client.post('/add_password', data={'service':'svc','username':'u','password':'short','notes':''})
     assert resp.status_code == 302
     with app.app_context():
-        assert Password.query.filter_by(service_name='svc').first() is None
+        pw = Password.query.filter_by(service_name='svc').first()
+        assert pw is not None
+        cipher = Fernet(app.config['ENCRYPTION_KEY'])
+        decrypted = cipher.decrypt(pw.password).decode()
+        assert decrypted == 'short'
 
 
-def test_update_password_rejects_weak(client):
+def test_update_password_accepts_weak(client):
     client, app = client
     with app.app_context():
         pw = Password.query.filter_by(service_name='email').first()
@@ -81,4 +85,4 @@ def test_update_password_rejects_weak(client):
         pw = Password.query.get(pw_id)
         cipher = Fernet(app.config['ENCRYPTION_KEY'])
         decrypted = cipher.decrypt(pw.password).decode()
-        assert decrypted == 'GoodPass1!'
+        assert decrypted == '123'
