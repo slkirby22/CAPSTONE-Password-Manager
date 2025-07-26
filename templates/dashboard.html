@@ -55,6 +55,14 @@
                                     <label for="notes" class="form-label">Notes:</label>
                                     <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" value="{{ selected_password.notes }}" autocomplete="off">
                                 </div>
+                                <div class="form-row">
+                                    <label for="shared_users" class="form-label">Share with:</label>
+                                    <select class="form-select form-control-custom" name="shared_users" multiple>
+                                        {% for user in all_users %}
+                                            <option value="{{ user.id }}" {% if user.id in selected_password.shared_ids %}selected{% endif %}>{{ user.username }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                                 <div class="mt-4">
                                     <button type="submit" class="btn btn-primary mx-2">Update</button>
                                     <button type="button" class="btn btn-secondary mx-2" id="toggle-password-{{ selected_password.id }}">Show Password</button>
@@ -81,6 +89,14 @@
                             </div>
                             <div class="form-row">
                                 <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" autocomplete="off">
+                            </div>
+                            <div class="form-row">
+                                <label for="shared_users" class="form-label">Share with:</label>
+                                <select class="form-select form-control-custom" name="shared_users" multiple>
+                                    {% for user in all_users %}
+                                        <option value="{{ user.id }}">{{ user.username }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                             <button type="submit" class="btn btn-primary mt-3">Add Password</button>
                         </form>

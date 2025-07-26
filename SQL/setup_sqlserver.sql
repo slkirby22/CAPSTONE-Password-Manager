@@ -119,6 +119,24 @@ BEGIN
 END
 GO
 
+-- Association table for shared passwords
+IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'password_user')
+BEGIN
+    CREATE TABLE password_user (
+        password_id INT NOT NULL,
+        user_id INT NOT NULL,
+        PRIMARY KEY (password_id, user_id),
+        FOREIGN KEY (password_id) REFERENCES password(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES [user](id) ON DELETE CASCADE
+    )
+    PRINT 'Table password_user created successfully.'
+END
+ELSE
+BEGIN
+    PRINT 'Table password_user already exists.'
+END
+GO
+
 -- Audit log table
 IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'audit_log')
 BEGIN

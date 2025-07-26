@@ -106,7 +106,10 @@ def dashboard():
     # Display the dashboard with decrypted passwords if the user is found
     if current_user:
         user_role = current_user.role
-        user_passwords = Password.query.filter_by(user_id=current_user.id).all()
+        user_passwords = Password.query.filter(
+            (Password.user_id == current_user.id) |
+            (Password.shared_users.any(id=current_user.id))
+        ).all()
 
         decrypted_passwords = []
         for pw in user_passwords:
@@ -117,8 +120,9 @@ def dashboard():
                 'password': cipher_suite.decrypt(pw.password).decode(),  # Decrypt here
                 'notes': pw.notes
             })
-
-        return render_template('dashboard.html', passwords=decrypted_passwords, error=error_msg)
+            
+        other_users = User.query.filter(User.id != current_user.id).all()
+        return render_template('dashboard.html', passwords=decrypted_passwords, all_users=other_users, error=error_msg)
     else:
         return redirect(url_for('index_route'))
 
@@ -139,16 +143,25 @@ def select_password_for_edit():
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
-        # Fetch the selected password for editing
-        selected_password = Password.query.filter_by(user_id=current_user.id, service_name=service_name).first()
+        # Fetch the selected password for editing (owned or shared)
+        selected_password = Password.query.filter(
+            (Password.user_id == current_user.id) |
+            (Password.shared_users.any(id=current_user.id)),
+            Password.service_name == service_name
+        ).first()
 
         if selected_password:
             
-            user_passwords = Password.query.filter_by(user_id=current_user.id).all()
-            
+            user_passwords = Password.query.filter(
+                (Password.user_id == current_user.id) |
+                (Password.shared_users.any(id=current_user.id))
+            ).all()
+
+            other_users = User.query.filter(User.id != current_user.id).all()
+
             # Decrypt the password
             decrypted_password = cipher_suite.decrypt(selected_password.password).decode()
-            
+
             # Pass decrypted data to template
             return render_template(
                 'dashboard.html',
@@ -157,9 +170,11 @@ def select_password_for_edit():
                     'service_name': selected_password.service_name,
                     'username': selected_password.username,
                     'password': decrypted_password,
-                    'notes': selected_password.notes
+                    'notes': selected_password.notes,
+                    'shared_ids': [u.id for u in selected_password.shared_users]
                 },
                 passwords=user_passwords,
+                all_users=other_users
                 error=error_msg
             )
         else:
@@ -461,9 +476,14 @@ def update_password(service):
     username = request.form.get('username')
     password = request.form.get('password')
     notes = request.form.get('notes')
+    shared_user_ids = request.form.getlist('shared_users')
 
     # Get the selected password to update
     password_to_update = Password.query.filter_by(id=password_id).first()
+    current_user = User.query.filter_by(id=session['user_id']).first()
+
+    if password_to_update and password_to_update.user_id != current_user.id:
+        return redirect(url_for('dashboard_route'))
 
     if password_to_update:
         if not password_meets_requirements(password):
@@ -473,6 +493,8 @@ def update_password(service):
         # Update the password's fields
         password_to_update.username = username
         password_to_update.notes = notes
+        if shared_user_ids is not None:
+            password_to_update.shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
 
         # Encrypt the password before saving it back to the database
         key = current_app.config['ENCRYPTION_KEY']
@@ -493,9 +515,10 @@ def delete_password(service):
     # Get the password ID from the form and find it in the database
     password_id = request.form['pw_id']
     password_entry = Password.query.filter_by(id=password_id).first()
+    current_user = User.query.filter_by(id=session['user_id']).first()
 
-    # Delete the password entry if it exists
-    if password_entry:
+    # Delete the password entry if it exists and belongs to the user
+    if password_entry and password_entry.user_id == current_user.id:
         db.session.delete(password_entry)
         db.session.commit()
 

@@ -57,8 +57,11 @@ def get_dashboard_data(user_id):
     if not current_user:
         return None  # Let the route handle the error
     
-    # Get and decrypt passwords
-    user_passwords = Password.query.filter_by(user_id=user_id).all()
+    # Get and decrypt passwords (owned or shared)
+    user_passwords = Password.query.filter(
+        (Password.user_id == user_id) |
+        (Password.shared_users.any(id=user_id))
+    ).all()
     passwords_data = []
     for pw in user_passwords:
         passwords_data.append({
@@ -87,15 +90,21 @@ def add_password_api(user_id, data):
     try:
         cipher_suite = Fernet(current_app.config['ENCRYPTION_KEY'])
         encrypted_password = cipher_suite.encrypt(data['password'].encode())
-        
+
+        shared_ids = data.get('shared_with', [])
+        shared_users = []
+        if shared_ids:
+            shared_users = User.query.filter(User.id.in_(shared_ids)).all()
+
         new_password = Password(
             user_id=user_id,
             service_name=data['service_name'],
             username=data['username'],
             password=encrypted_password,
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            shared_users=shared_users
         )
-        
+
         db.session.add(new_password)
         db.session.commit()
 
@@ -134,6 +143,10 @@ def update_password_api(user_id, password_id, data):
             password_entry.username = data['username']
         if 'notes' in data:
             password_entry.notes = data['notes']
+        if 'shared_with' in data:
+            password_entry.shared_users = User.query.filter(
+                User.id.in_(data['shared_with'])
+            ).all()
             
         db.session.commit()
 
