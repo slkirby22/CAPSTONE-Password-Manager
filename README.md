@@ -58,6 +58,7 @@ Create a `.env` file in the project root or set the variables manually. The appl
 | `DB_NAME` | `password_manager` |
 | `DB_TYPE` | `mysql` |
 | `JWT_SECRET_KEY` | `your-256-bit-secret` |
+| `SESSION_TIMEOUT_MINUTES` | `15` |
 
 7. **Run the Application:**
 Start the application locally:

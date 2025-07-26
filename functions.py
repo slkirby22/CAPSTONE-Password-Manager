@@ -49,6 +49,7 @@ def login():
                         session['username'] = user.username
                         session['user_id'] = user.id
                         session['role'] = user.role
+                        session.permanent = True
 
                         log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
 
