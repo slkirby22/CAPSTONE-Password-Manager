@@ -436,6 +436,30 @@ def unlock_account(user_id):
         return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
 
 
+def lock_account(user_id):
+    if 'user_id' not in session:
+        return redirect(url_for('index_route'))
+
+    # Find the user to lock
+    db_user = User.query.filter_by(id=user_id).first()
+
+    if db_user:
+        if session['role'] in ['admin', 'manager']:
+            if db_user.failed_login_attempts <= 3:
+                db_user.failed_login_attempts = 4
+                db.session.commit()
+
+                log_event(f"User {session['username']} locked user {db_user.username}.", "ACCOUNT_LOCK", session['user_id'])
+                return render_template('view_users.html', message="Account locked", users=User.query.all(), messageonuser=db_user.username, selected_user=db_user)
+            else:
+                return render_template('view_users.html', error="Account already locked.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
+        else:
+            log_event(f"User {session['username']} attempted to lock user {db_user.username} without proper authorization.", "UNAUTHORIZED_ACTION", session['user_id'])
+            return render_template('view_users.html', error="You are not authorized to lock accounts.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
+    else:
+        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
+
+
 def add_password():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
