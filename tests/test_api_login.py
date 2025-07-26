@@ -8,7 +8,7 @@ os.environ.setdefault('JWT_SECRET_KEY', 'test-secret')
 import pytest
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager
-from models import db, User
+from models import db, User, audit_log
 from api_functions import authenticate_and_get_token, pwd_context
 
 
@@ -63,6 +63,11 @@ def test_successful_login(client):
     data = response.get_json()
     assert 'access_token' in data
     assert data['user_id']
+    with app.app_context():
+        logs = audit_log.query.all()
+        assert len(logs) == 1
+        assert logs[0].event_type == 'API_LOGIN'
+        assert logs[0].user_id == data['user_id']
 
 
 def test_invalid_credentials(client):

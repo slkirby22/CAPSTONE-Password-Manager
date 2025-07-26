@@ -22,7 +22,13 @@ def authenticate_and_get_token(username, password):
     db.session.commit()
 
     access_token = create_access_token(identity=str(user.id))
-    
+
+    log_event(
+        f"User {user.username} authenticated via API.",
+        "API_LOGIN",
+        user.id,
+    )
+
     return {
         "access_token": access_token,
         "user_id": user.id
@@ -92,7 +98,14 @@ def add_password_api(user_id, data):
         
         db.session.add(new_password)
         db.session.commit()
-        
+
+        user = User.query.get(user_id)
+        log_event(
+            f"User {user.username} added a password via API.",
+            "API_PASSWORD_ADD",
+            user_id,
+        )
+
         return {
             "message": "Password added successfully",
             "password_id": new_password.id
@@ -123,6 +136,13 @@ def update_password_api(user_id, password_id, data):
             password_entry.notes = data['notes']
             
         db.session.commit()
+
+        user = User.query.get(user_id)
+        log_event(
+            f"User {user.username} updated a password via API.",
+            "API_PASSWORD_UPDATE",
+            user_id,
+        )
         return {"message": "Password updated successfully"}
     except Exception as e:
         db.session.rollback()
@@ -137,6 +157,13 @@ def delete_password_api(user_id, password_id):
     try:
         db.session.delete(password_entry)
         db.session.commit()
+
+        user = User.query.get(user_id)
+        log_event(
+            f"User {user.username} deleted a password via API.",
+            "API_PASSWORD_DELETE",
+            user_id,
+        )
         return {"message": "Password deleted successfully"}
     except Exception as e:
         db.session.rollback()
