@@ -174,9 +174,10 @@ def select_password_for_edit():
                     'shared_ids': [u.id for u in selected_password.shared_users]
                 },
                 passwords=user_passwords,
-                all_users=other_users
+                all_users=other_users,
                 error=error_msg
-            )
+                )
+        
         else:
             return redirect(url_for('dashboard_route'))
     else:

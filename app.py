@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from functions import index, login, dashboard, select_password_for_edit, logout, create_user, view_users, select_user_for_edit, update_user, delete_user, unlock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs
@@ -110,6 +110,17 @@ def apply_security_headers(response):
 @app.route('/')
 def index_route():
     return index()
+
+@app.route('/favicon.ico')
+def favicon():
+    try:
+        return send_from_directory(
+            os.path.join(app.root_path, 'static'),
+            'favicon.ico', mimetype='image/vnd.microsoft.icon'
+        )
+    except FileNotFoundError:
+        log_event("Favicon not found.", "error", 0)
+        return "", 204
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute")
