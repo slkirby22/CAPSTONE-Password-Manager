@@ -28,6 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    setupUserSearch('add');
+    setupUserSearch('update');
 });
 
 function togglePassword() {
@@ -109,4 +112,51 @@ function updateStrengthFeedback(input) {
 // Export for Node.js testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { generatePassword };
+}
+
+function setupUserSearch(prefix) {
+    const searchBtn = document.getElementById(`search-button-${prefix}`);
+    const searchInput = document.getElementById(`search-user-${prefix}`);
+    const resultDiv = document.getElementById(`search-result-${prefix}`);
+    const list = document.getElementById(`share-list-${prefix}`);
+
+    if (!searchBtn || !searchInput || !resultDiv || !list) return;
+
+    searchBtn.addEventListener('click', () => {
+        const username = searchInput.value.trim().toUpperCase();
+        if (!username) return;
+        fetch(`/search_user?username=${encodeURIComponent(username)}`)
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.found) {
+                    resultDiv.textContent = 'User found';
+                    if (!list.querySelector(`li[data-id="${data.id}"]`)) {
+                        const li = document.createElement('li');
+                        li.dataset.id = data.id;
+                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        li.textContent = data.username;
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'btn btn-sm btn-danger remove-user';
+                        removeBtn.textContent = 'Remove';
+                        removeBtn.addEventListener('click', () => li.remove());
+                        const hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'shared_users';
+                        hidden.value = data.id;
+                        li.appendChild(removeBtn);
+                        li.appendChild(hidden);
+                        list.appendChild(li);
+                    }
+                } else {
+                    resultDiv.textContent = 'User not found';
+                }
+            });
+    });
+
+    list.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-user')) {
+            e.target.closest('li').remove();
+        }
+    });
 }

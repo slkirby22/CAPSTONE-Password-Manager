@@ -121,8 +121,7 @@ def dashboard():
                 'notes': pw.notes
             })
             
-        other_users = User.query.filter(User.id != current_user.id).all()
-        return render_template('dashboard.html', passwords=decrypted_passwords, all_users=other_users, error=error_msg)
+        return render_template('dashboard.html', passwords=decrypted_passwords, error=error_msg)
     else:
         return redirect(url_for('index_route'))
 
@@ -157,8 +156,6 @@ def select_password_for_edit():
                 (Password.shared_users.any(id=current_user.id))
             ).all()
 
-            other_users = User.query.filter(User.id != current_user.id).all()
-
             # Decrypt the password
             decrypted_password = cipher_suite.decrypt(selected_password.password).decode()
 
@@ -171,10 +168,10 @@ def select_password_for_edit():
                     'username': selected_password.username,
                     'password': decrypted_password,
                     'notes': selected_password.notes,
-                    'shared_ids': [u.id for u in selected_password.shared_users]
+                    'shared_users': [{'id': u.id, 'username': u.username} for u in selected_password.shared_users],
+                    'owner_id': selected_password.user_id
                 },
                 passwords=user_passwords,
-                all_users=other_users,
                 error=error_msg
                 )
         
@@ -460,6 +457,20 @@ def lock_account(user_id):
         return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
 
 
+def search_user():
+    if 'user_id' not in session:
+        return jsonify({'found': False})
+
+    username = request.args.get('username', '').upper()
+    if not username:
+        return jsonify({'found': False})
+
+    user = User.query.filter_by(username=username).first()
+    if user and user.id != session['user_id']:
+        return jsonify({'found': True, 'id': user.id, 'username': user.username})
+    return jsonify({'found': False})
+
+
 def add_password():
     if 'user_id' not in session:
         return redirect(url_for('index_route'))
@@ -472,14 +483,18 @@ def add_password():
     password = request.form['password']
     new_username = request.form['username']
     notes = request.form['notes']
+    shared_user_ids = request.form.getlist('shared_users')
 
     # Get the current user
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
         encrypted_password = cipher_suite.encrypt(password.encode())
+        shared_users = []
+        if shared_user_ids:
+            shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
 
-        new_password = Password(service_name=service, username=new_username, password=encrypted_password, notes=notes, user_id=current_user.id)
+        new_password = Password(service_name=service, username=new_username, password=encrypted_password, notes=notes, user_id=current_user.id, shared_users=shared_users)
         db.session.add(new_password)
         db.session.commit()
 
