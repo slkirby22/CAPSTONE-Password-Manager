@@ -55,12 +55,33 @@ function togglePasswordList(passwordid) {
 }
 
 function generatePassword(length) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
-    let pw = '';
-    for (let i = 0; i < length; i++) {
-        pw += chars.charAt(Math.floor(Math.random() * chars.length));
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const digits = '0123456789';
+    const specials = '!@#$%^&*()_+~`|}{[]:;?><,./-=';
+
+    if (length < 4) {
+        length = 4; // minimum to include one of each category
     }
-    return pw;
+
+    const passwordChars = [];
+    passwordChars.push(upper.charAt(Math.floor(Math.random() * upper.length)));
+    passwordChars.push(lower.charAt(Math.floor(Math.random() * lower.length)));
+    passwordChars.push(digits.charAt(Math.floor(Math.random() * digits.length)));
+    passwordChars.push(specials.charAt(Math.floor(Math.random() * specials.length)));
+
+    const all = upper + lower + digits + specials;
+    for (let i = passwordChars.length; i < length; i++) {
+        passwordChars.push(all.charAt(Math.floor(Math.random() * all.length)));
+    }
+
+    // Shuffle to ensure random order
+    for (let i = passwordChars.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
+    }
+
+    return passwordChars.join('');
 }
 
 function checkStrength(pw) {
@@ -83,4 +104,9 @@ function updateStrengthFeedback(input) {
     if (result === 'Strong') color = 'green';
     feedback.textContent = result;
     feedback.style.color = color;
+}
+
+// Export for Node.js testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { generatePassword };
 }
