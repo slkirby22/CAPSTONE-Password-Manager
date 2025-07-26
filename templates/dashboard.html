@@ -76,7 +76,11 @@
                                 <div class="mt-4">
                                     <button type="submit" class="btn btn-primary mx-2">Update</button>
                                     <button type="button" class="btn btn-secondary mx-2" id="toggle-password-{{ selected_password.id }}">Show Password</button>
+                                    {% for user in selected_password.shared_users %}
+                                        {% if session.user_id == selected_password.owner_id %}
                                     <button type="submit" formaction="{{ url_for('delete_password_route', service=selected_password.service_name) }}" class="btn btn-danger mx-2">Delete</button>
+                                        {% endif %}
+                                    {% endfor %}
                                 </div>
                             </form>
                         </div>

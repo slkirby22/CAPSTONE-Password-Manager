@@ -499,6 +499,8 @@ def add_password():
         db.session.commit()
 
         log_event(f"User {current_user.username} added a password.", "PASSWORD_ADD", current_user.id)
+        if shared_user_ids:
+            log_event(f"User {current_user.username} shared password for {service} with users: {', '.join(shared_user_ids)}", "PASSWORD_SHARE", current_user.id)
 
     return redirect(url_for('dashboard_route'))
 
@@ -527,6 +529,7 @@ def update_password(service):
         password_to_update.notes = notes
         if shared_user_ids is not None:
             password_to_update.shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
+            log_event(f"User {session['username']} updated password share for {password_id}. Password now shared with {shared_user_ids}", "PASSWORD_SHARE", session['user_id'])
 
         # Encrypt the password before saving it back to the database
         key = current_app.config['ENCRYPTION_KEY']
