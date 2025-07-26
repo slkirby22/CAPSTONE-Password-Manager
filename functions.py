@@ -453,10 +453,6 @@ def add_password():
     current_user = User.query.filter_by(id=session['user_id']).first()
 
     if current_user:
-        if not password_meets_requirements(password):
-            log_event(f"User {current_user.username} attempted to add weak password.", "INVALID_PASSWORD", current_user.id)
-            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
-
         encrypted_password = cipher_suite.encrypt(password.encode())
 
         new_password = Password(service_name=service, username=new_username, password=encrypted_password, notes=notes, user_id=current_user.id)
@@ -487,10 +483,6 @@ def update_password(service):
         return redirect(url_for('dashboard_route'))
 
     if password_to_update:
-        if not password_meets_requirements(password):
-            log_event("Weak password rejected during update.", "INVALID_PASSWORD", session.get('user_id'))
-            return redirect(url_for('dashboard_route', error="Password does not meet complexity requirements."))
-
         # Update the password's fields
         password_to_update.username = username
         password_to_update.notes = notes
