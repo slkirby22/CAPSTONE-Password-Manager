@@ -91,11 +91,17 @@ def apply_csp(response):
         "style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com;"
     )
     return response
+
+@app.after_request
+def set_security_headers(response):
+    return apply_security_headers(response)
 def apply_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains'
+    response.headers['Session-Cookie-SameSite'] = 'Lax'
     return response
 
 
