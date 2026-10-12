@@ -1,4 +1,5 @@
 """Audit-route authorization with disposable SQLite data, never a live vault."""
+from auth_helpers import auth_identity_for
 import os
 import sys
 from datetime import datetime, timedelta
@@ -55,6 +56,7 @@ def client():
 def set_session(client, user_id, role='admin'):
     with client.session_transaction() as session:
         session['user_id'] = user_id
+        session['auth_identity'] = auth_identity_for(client, user_id)
         session['role'] = role
         session['username'] = 'UNTRUSTED_SESSION_NAME'
 

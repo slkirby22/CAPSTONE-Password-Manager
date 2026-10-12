@@ -9,7 +9,7 @@ COPY app.py api_functions.py functions.py models.py config.py authorization.py a
 COPY templates /app/templates
 COPY static /app/static
 COPY deployment/start.sh /app/deployment/start.sh
-COPY scripts/init_synthetic_db.py /app/scripts/init_synthetic_db.py
+COPY scripts/init_synthetic_db.py scripts/migrate_account_identity.py /app/scripts/
 USER 10001:10001
 EXPOSE 10000
 CMD ["sh", "deployment/start.sh"]

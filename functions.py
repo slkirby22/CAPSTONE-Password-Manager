@@ -6,7 +6,7 @@ from cryptography.fernet import Fernet
 import re
 import pytz
 from audit_events import log_event
-from authorization import require_web_user, USER_MANAGERS, can_manage_user, can_assign_role
+from authorization import current_web_user, require_web_user, USER_MANAGERS, can_manage_user, can_assign_role
 
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
@@ -31,7 +31,7 @@ def index():
 
 def login():
     # Check if user is already logged in
-    if 'user_id' in session:
+    if current_web_user() is not None:
         return redirect(url_for('dashboard_route'))
     
     # Handle login form submission
@@ -47,6 +47,8 @@ def login():
             if user.failed_login_attempts <= 3:
                 try:
                     if pwd_context.verify(password, user.password):
+                        session.clear()
+                        session['auth_identity'] = user.auth_identity
                         session['username'] = user.username
                         session['user_id'] = user.id
                         session['role'] = user.role
@@ -168,18 +170,11 @@ def select_password_for_edit():
 
 
 def logout():
-    user_id = session.get('user_id')
-    username = session.get('username')
-    
-    # Only log event if a user_id exists in the session
-    if session.get('user_id'):
-        log_event(f"User {username} logged out.", "USER_LOGOUT", user_id)
-   
-    # Clear session after logging the event to avoid issues with logging.
-    session.pop('user_id', None)
-    session.pop('username', None)
-    session.pop('role', None)
-    
+    # An old cookie must not attribute an event to a recycled account ID.
+    user = current_web_user()
+    if user is not None:
+        log_event(f"User {user.username} logged out.", "USER_LOGOUT", user.id)
+    session.clear()
     return redirect(url_for('index_route'))
 
 

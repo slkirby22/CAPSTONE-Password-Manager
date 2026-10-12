@@ -31,3 +31,14 @@ def test_container_python_copy_set_imports_application_in_isolation(tmp_path):
         str(tmp_path),
     ], cwd=tmp_path, env=env, text=True, capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr
+
+
+def test_container_ships_offline_migration_without_startup_execution(tmp_path):
+    dockerfile = (ROOT / 'Dockerfile').read_text()
+    assert 'COPY scripts/init_synthetic_db.py scripts/migrate_account_identity.py /app/scripts/' in dockerfile
+    assert 'migrate_account_identity' not in (ROOT / 'deployment/start.sh').read_text()
+    shutil.copy2(ROOT / 'scripts/migrate_account_identity.py', tmp_path)
+    result = subprocess.run([sys.executable, '-I', str(tmp_path / 'migrate_account_identity.py'), '--help'],
+                            cwd=tmp_path, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert '--synthetic-only' in result.stdout

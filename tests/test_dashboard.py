@@ -1,3 +1,4 @@
+from auth_helpers import auth_identity_for
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
@@ -67,6 +68,7 @@ def test_dashboard_displays_passwords(client, monkeypatch):
     monkeypatch.setattr('functions.render_template', fake_render)
     with client.session_transaction() as sess:
         sess['user_id'] = 1
+        sess['auth_identity'] = auth_identity_for(client, 1)
         sess['username'] = 'DASHUSER'
         sess['role'] = 'employee'
     response = client.get('/dashboard')
@@ -89,6 +91,7 @@ def test_dashboard_shows_shared_password(client, monkeypatch):
     monkeypatch.setattr('functions.render_template', fake_render)
     with client.session_transaction() as sess:
         sess['user_id'] = 2
+        sess['auth_identity'] = auth_identity_for(client, 2)
         sess['username'] = 'OTHER'
         sess['role'] = 'employee'
     response = client.get('/dashboard')

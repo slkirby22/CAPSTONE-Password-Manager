@@ -1,5 +1,6 @@
 """Current database identity and legacy role policies (not v2 team ownership)."""
 from functools import wraps
+import re
 
 from flask import g, jsonify, redirect, request, session, url_for
 from models import User
@@ -9,12 +10,22 @@ ROLES = frozenset({'admin', 'manager', 'employee'})
 USER_MANAGERS = ('admin', 'manager')
 
 
+def valid_auth_identity(value):
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value) is not None
+
+
 def current_web_user():
-    """Resolve each request from the database, never the cached session role."""
+    """Bind every cookie to its original account, never a recycled numeric ID."""
     user_id = session.get('user_id')
-    if user_id is None:
-        return None
-    return User.query.filter_by(id=user_id).first()
+    binding = session.get('auth_identity')
+    user = None
+    if (type(user_id) is int and 0 < user_id <= 2**63 - 1
+            and valid_auth_identity(binding)):
+        user = User.query.filter_by(id=user_id, auth_identity=binding).first()
+    if user is None and ('user_id' in session or 'auth_identity' in session):
+        # Legacy sessions deliberately sign out rather than being upgraded by ID.
+        session.clear()
+    return user
 
 
 def require_web_user(*roles, json_response=False, search_response=False,
@@ -70,13 +81,17 @@ def can_assign_role(actor, role, target=None):
 
 
 def register_jwt_current_user(jwt):
-    """A valid token must still identify an existing account on every request."""
+    """A signed token must match the current account incarnation on every request."""
     @jwt.user_lookup_loader
     def lookup_user(header, payload):
         identity = payload.get('sub')
-        if not isinstance(identity, str) or not identity.isdecimal():
+        binding = payload.get('auth_identity')
+        if (not isinstance(identity, str)
+                or re.fullmatch(r'[1-9][0-9]{0,18}', identity) is None
+                or int(identity) > 2**63 - 1
+                or not valid_auth_identity(binding)):
             return None
-        return User.query.filter_by(id=identity).first()
+        return User.query.filter_by(id=int(identity), auth_identity=binding).first()
 
     @jwt.user_lookup_error_loader
     def unknown_user(header, payload):

@@ -50,7 +50,8 @@ def authenticate_and_get_token(username, password):
     user.failed_login_attempts = 0
     db.session.commit()
 
-    access_token = create_access_token(identity=str(user.id))
+    access_token = create_access_token(
+        identity=str(user.id), additional_claims={'auth_identity': user.auth_identity})
 
     log_event(
         f"User {user.username} authenticated via API.",
