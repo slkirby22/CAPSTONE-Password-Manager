@@ -2,7 +2,9 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from functions import index, login, dashboard, select_password_for_edit, logout, create_user, view_users, select_user_for_edit, update_user, delete_user, unlock_account, lock_account, add_password, update_password, delete_password, log_event, audit_log_viewer, get_audit_logs, search_user
-from api_functions import get_dashboard_data, authenticate_and_get_token, revoke_token, add_password_api, update_password_api, delete_password_api
+from api_functions import authenticate_and_get_token, revoke_token, retired_vault_api
+from functions import reveal_password, retired_web_vault
+from item_identity import validate_item_schema
 from models import db, User, Password, TokenBlacklist
 import os
 from cryptography.fernet import Fernet
@@ -31,9 +33,9 @@ cors = CORS(app,
             "origins": [
                 "http://localhost:8081",  # Mobile app domain
             ],
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": True,
+            "supports_credentials": False,
             "max_age": 86400
         }
     }
@@ -51,9 +53,11 @@ def ensure_db_exists():
         return
     try:
         User.query.limit(1).first()
-    except Exception as e:
+        validate_item_schema(db.session.connection())
+    except Exception:
+        db.session.rollback()
         app.logger.error("Database readiness check failed")
-        raise
+        return jsonify({"error": "Service unavailable"}), 503
 
 @app.after_request
 def apply_csp(response):
@@ -68,6 +72,8 @@ def apply_csp(response):
 def set_security_headers(response):
     return apply_security_headers(response)
 def apply_security_headers(response):
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Pragma'] = 'no-cache'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
@@ -81,6 +87,7 @@ def apply_security_headers(response):
 def healthz():
     # Validate mapped tables/columns without fetching rows or exposing errors.
     try:
+        validate_item_schema(db.session.connection())
         for table in db.metadata.sorted_tables:
             db.session.execute(table.select().limit(0))
     except Exception:
@@ -116,7 +123,7 @@ def dashboard_route():
 
 @app.route('/select_password_for_edit', methods=['GET', 'POST'])
 def select_password_for_edit_route():
-    return select_password_for_edit()
+    return retired_web_vault()
 
 @app.route('/logout')
 def logout_route():
@@ -159,12 +166,32 @@ def add_password_route():
     return add_password()
 
 @app.route('/update_password/<service>', methods=['POST'])
-def update_password_route(service):
-    return update_password(service)
+def legacy_update_password_route(service):
+    return retired_web_vault()
 
 @app.route('/delete_password/<service>', methods=['POST'])
-def delete_password_route(service):
-    return delete_password(service)
+def legacy_delete_password_route(service):
+    return retired_web_vault()
+
+
+@app.route('/passwords/<item_id>')
+def item_detail_route(item_id):
+    return select_password_for_edit(item_id)
+
+
+@app.route('/passwords/<item_id>/reveal', methods=['POST'])
+def reveal_password_route(item_id):
+    return reveal_password(item_id)
+
+
+@app.route('/passwords/<item_id>/update', methods=['POST'])
+def update_password_route(item_id):
+    return update_password(item_id)
+
+
+@app.route('/passwords/<item_id>/delete', methods=['POST'])
+def delete_password_route(item_id):
+    return delete_password(item_id)
 
 @app.route('/audit_log_viewer')
 def audit_log_viewer_route():
@@ -218,49 +245,26 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 def handle_revoked_token(jwt_header, jwt_payload):
     return jsonify({"error": "Token revoked"}), 401
 
+# Historical mobile vault contract is intentionally retired, not upgraded by ID.
 @app.route('/api/dashboard')
 @jwt_required()
-@limiter.limit("10 per minute")
 def api_dashboard():
-    if not get_jwt_identity():
-        return jsonify({"error": "Unauthorized"}), 401
-    user_id = get_jwt_identity()
-    
-    data = get_dashboard_data(user_id)
-    if not data:
-        return jsonify({"error": "User not found"}), 404
-    
-    return jsonify(data)
+    return retired_vault_api()
+
 
 @app.route('/api/passwords', methods=['POST'])
 @csrf.exempt
 @jwt_required()
-@limiter.limit("10 per minute")
 def api_add_password():
-    if not request.is_json:
-        return jsonify({"error": "JSON required"}), 400
-    
-    result = add_password_api(get_jwt_identity(), request.get_json())
-    return jsonify(result), result.get("status_code", 200)
+    return retired_vault_api()
 
-@app.route('/api/passwords/<int:password_id>', methods=['PATCH'])
+
+@app.route('/api/passwords/<password_id>', methods=['PATCH', 'DELETE'])
 @csrf.exempt
 @jwt_required()
-@limiter.limit("10 per minute")
-def api_update_password(password_id):
-    if not request.is_json:
-        return jsonify({"error": "JSON required"}), 400
-    
-    result = update_password_api(get_jwt_identity(), password_id, request.get_json())
-    return jsonify(result), result.get("status_code", 200)
+def api_retired_password(password_id):
+    return retired_vault_api()
 
-@app.route('/api/passwords/<int:password_id>', methods=['DELETE'])
-@csrf.exempt
-@jwt_required()
-@limiter.limit("10 per minute")
-def api_delete_password(password_id):
-    result = delete_password_api(get_jwt_identity(), password_id)
-    return jsonify(result), result.get("status_code", 200)
 
 if __name__ == '__main__':
     app.run(debug=False)

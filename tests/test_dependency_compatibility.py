@@ -57,8 +57,11 @@ def test_legacy_scrypt_and_fernet_records_survive_upgrade(real_client):
     token = response.get_json()['access_token']
     headers = {'Authorization': f'Bearer {token}'}
     response = real_client.get('/api/dashboard', headers=headers)
-    assert response.status_code == 200
-    assert response.get_json()['passwords'][0]['password'] == 'synthetic legacy compatibility password'
+    assert response.status_code == 410
+    assert response.get_json()['error'] == 'vault_api_retired'
+    # Legacy ciphertext compatibility survives without restoring bulk API decrypt.
+    assert Fernet(app.config['ENCRYPTION_KEY']).decrypt(LEGACY_CIPHERTEXT).decode() == (
+        'synthetic legacy compatibility password')
     assert not pwd_context.verify('incorrect synthetic password', LEGACY_HASH)
     assert real_client.post('/api/logout', headers=headers).status_code == 200
     revoked = real_client.get('/api/dashboard', headers=headers)
@@ -92,7 +95,7 @@ def test_real_api_rejects_invalid_tokens(real_client, kind):
     assert 'passwords' not in response.get_json()
 
 
-def test_cors_preserves_exact_mobile_origin(real_client):
+def test_cors_retains_exact_legacy_origin_without_cookie_credentials(real_client):
     response = real_client.options('/api/passwords', headers={
         'Origin': 'http://localhost:8081',
         'Access-Control-Request-Method': 'POST',
@@ -100,7 +103,7 @@ def test_cors_preserves_exact_mobile_origin(real_client):
     })
     assert response.status_code == 200
     assert response.headers['Access-Control-Allow-Origin'] == 'http://localhost:8081'
-    assert response.headers['Access-Control-Allow-Credentials'] == 'true'
+    assert 'Access-Control-Allow-Credentials' not in response.headers
     assert 'POST' in response.headers['Access-Control-Allow-Methods']
     assert 'Authorization' in response.headers['Access-Control-Allow-Headers']
 

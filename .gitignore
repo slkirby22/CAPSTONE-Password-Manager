@@ -177,3 +177,6 @@ cython_debug/
 *.sqlite3
 .env.*
 !.env.example
+
+# Test-only browser dependencies
+node_modules/

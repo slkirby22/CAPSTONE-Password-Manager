@@ -11,6 +11,21 @@ blocked pending its launch gates. Nothing deploys automatically from this setup.
 The isolated [runtime dependency remediation](Documentation/dependency-remediation.md)
 documents upgrade compatibility checks and the remaining security gates.
 
+## Web-first development contract
+
+The development version uses [immutable item selection and deliberate per-item
+reveal](Documentation/web-first-item-access.md). List/detail pages contain only
+metadata. Shared users can reveal; only owners can change or delete items.
+The [legacy vault API is retired](Documentation/web-first-api-retirement.md)
+with authenticated HTTP 410 responses. Historical mobile builds are intentionally
+unsupported by this version; their source and the historical capstone are preserved.
+Mobile adaptation follows a future versioned protocol, not a bulk-plaintext fallback.
+
+Existing disposable SQLite fixtures also require the explicit
+[item identity upgrade](Documentation/item-identity-upgrade.md). No startup
+migration or real-data migration is authorized. This milestone's schema readiness
+is SQLite-only; other backend guards require separate review.
+
 ## Account identity upgrade
 
 Existing disposable SQLite databases need the explicit

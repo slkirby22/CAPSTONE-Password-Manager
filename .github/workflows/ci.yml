@@ -29,6 +29,14 @@ jobs:
       - run: python -m pip check
       - run: python -m pytest -q
       - run: python scripts/smoke_wsgi.py
+      - name: Install pinned browser test tooling
+        run: |
+          npm ci --prefix tests/browser
+          tests/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Exercise disposable web item flow in Chromium
+        env:
+          NODE_PATH: ${{ github.workspace }}/tests/browser/node_modules
+        run: python scripts/smoke_item_browser.py
       - run: git diff --check
   container:
     name: Container build and empty-schema smoke

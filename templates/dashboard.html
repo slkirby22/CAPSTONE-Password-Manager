@@ -2,6 +2,7 @@
     <head>
         <title>Dashboard</title>
         <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
+        <script src="{{ url_for('static', filename='js/item-reveal.js') }}" defer></script>
         <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
         <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
         <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
@@ -21,40 +22,44 @@
                         <p class="error">{{ error }}</p>
                     {% endif %}
                     
-                    <form action="{{ url_for('select_password_for_edit_route') }}" method="GET" class="mb-4">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="form-row">
-                            <label for="service_name" class="form-label">Select Service:</label>
-                            <select class="form-select form-control-custom" name="service_name" id="service_name" required>
-                                <option value="" disabled selected>Select a service</option>
-                                {% for password in passwords %}
-                                    <option value="{{ password.service_name }}">{{ password.service_name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-3">View</button>
-                    </form>
+                    <nav aria-label="Password items" class="mb-4">
+                        <ul class="list-group">
+                            {% for password in passwords %}
+                                <li class="list-group-item">
+                                    <a href="/passwords/{{ password.item_id }}"{% if selected_password and selected_password.item_id == password.item_id %} aria-current="page"{% endif %}>{{ password.service_name }} — {{ password.username }}</a>
+                                </li>
+                            {% else %}
+                                <li class="list-group-item">No passwords available.</li>
+                            {% endfor %}
+                        </ul>
+                    </nav>
 
                     {% if selected_password %}
-                        <div class="password-form">
-                            <form action="{{ url_for('update_password_route', service=selected_password.service_name) }}" method="POST">
+                        <section class="password-form" aria-label="Selected password">
+                            <h3>Service: {{ selected_password.service_name }}</h3>
+                            <div id="item-reveal" data-item-id="{{ selected_password.item_id }}" data-csrf-token="{{ csrf_token() }}">
+                                <button type="button" class="btn btn-secondary" id="reveal-password" aria-controls="revealed-password" aria-expanded="false">Reveal password</button>
+                                <button type="button" class="btn btn-secondary" id="hide-password" hidden>Hide password</button>
+                                <pre id="revealed-password" aria-label="Current password" hidden></pre>
+                                <p id="reveal-status" role="status" aria-live="polite"></p>
+                                <small>Revealed passwords are cleared after 30 seconds or when you leave this page.</small>
+                            </div>
+                            {% if selected_password.can_edit %}
+                            <form action="/passwords/{{ selected_password.item_id }}/update" method="POST">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="pw_id" value="{{ selected_password.id }}">
-                                <div class="form-row">
-                                    <label for="service" class="form-label"><h3>Service: {{selected_password.service_name}}</h3></label>
-                                </div>
                                 <div class="form-row">
                                     <label for="username" class="form-label">Username:</label>
-                                    <input type="text" class="form-control form-control-custom" name="username" placeholder="New username" value="{{ selected_password.username }}" autocomplete="off" required>
+                                    <input id="username" type="text" class="form-control form-control-custom" name="username" value="{{ selected_password.username }}" autocomplete="off" required>
                                 </div>
                                 <div class="form-row">
-                                    <label for="password" class="form-label">Password:</label>
-                                    <input type="password" class="form-control form-control-custom password-input" id="password{{ selected_password.id }}" name="password" placeholder="New password" value="{{ selected_password.password }}" autocomplete="off" required>
-                                    <small id="strength-password{{ selected_password.id }}" class="form-text"></small>
+                                    <label><input type="checkbox" id="replace-password" name="replace_password" value="1"> Replace password</label>
+                                    <label for="replacement-password" class="form-label">New password (leave replacement unchecked to keep current password):</label>
+                                    <input type="password" class="form-control form-control-custom password-input" id="replacement-password" name="password" autocomplete="new-password" disabled>
+                                    <small id="strength-replacement-password" class="form-text"></small>
                                 </div>
                                 <div class="form-row">
                                     <label for="notes" class="form-label">Notes:</label>
-                                    <input type="text" class="form-control form-control-custom" name="notes" placeholder="Notes" value="{{ selected_password.notes }}" autocomplete="off">
+                                    <input id="notes" type="text" class="form-control form-control-custom" name="notes" value="{{ selected_password.notes }}" autocomplete="off">
                                 </div>
                                 <div class="form-row">
                                     <label for="search-user-update" class="form-label">Share with:</label>
@@ -63,27 +68,26 @@
                                     <div id="search-result-update" class="mt-1"></div>
                                     <ul id="share-list-update" class="list-group mt-2">
                                         {% for user in selected_password.shared_users %}
-                                            <li data-id="{{ user.id }}" class="list-group-item d-flex justify-content-between align-items-center">
+                                            <li data-id="{{ user.auth_identity }}" class="list-group-item d-flex justify-content-between align-items-center">
                                                 {{ user.username }}
-                                                {% if session.user_id == selected_password.owner_id %}
                                                 <button type="button" class="btn btn-sm btn-danger remove-user">Remove</button>
-                                                {% endif %}
-                                                <input type="hidden" name="shared_users" value="{{ user.id }}">
+                                                <input type="hidden" name="shared_users" value="{{ user.auth_identity }}">
                                             </li>
                                         {% endfor %}
                                     </ul>
                                 </div>
-                                <div class="mt-4">
-                                    <button type="submit" class="btn btn-primary mx-2">Update</button>
-                                    <button type="button" class="btn btn-secondary mx-2" id="toggle-password-{{ selected_password.id }}">Show Password</button>
-                                    {% for user in selected_password.shared_users %}
-                                        {% if session.user_id == selected_password.owner_id %}
-                                    <button type="submit" formaction="{{ url_for('delete_password_route', service=selected_password.service_name) }}" class="btn btn-danger mx-2">Delete</button>
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
+                                <button type="submit" class="btn btn-primary mt-4">Update</button>
                             </form>
-                        </div>
+                            <form action="/passwords/{{ selected_password.item_id }}/delete" method="POST" class="mt-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger">Delete</button>
+                            </form>
+                            {% else %}
+                                <p>Username: {{ selected_password.username }}</p>
+                                <p>Notes: {{ selected_password.notes }}</p>
+                                <p>This item is shared with you. Only its owner can edit or delete it.</p>
+                            {% endif %}
+                        </section>
                     {% endif %}
 
                     <div class="password-form">

@@ -7,6 +7,7 @@ import re
 import pytz
 from audit_events import log_event
 from authorization import current_web_user, require_web_user, USER_MANAGERS, can_manage_user, can_assign_role
+from vault_access import item_metadata, resolve_item, resolve_recipients, valid_item_id
 
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
@@ -84,89 +85,60 @@ def login():
 
 @require_web_user()
 def dashboard():
-
-    error_msg = request.args.get('error')
-
-    key = current_app.config['ENCRYPTION_KEY']
-    cipher_suite = Fernet(key)
-
-    current_user = g.authenticated_user
-
-    # Display the dashboard with decrypted passwords if the user is found
-    if current_user:
-        user_role = current_user.role
-        user_passwords = Password.query.filter(
-            (Password.user_id == current_user.id) |
-            (Password.shared_users.any(id=current_user.id))
-        ).all()
-
-        decrypted_passwords = []
-        for pw in user_passwords:
-            decrypted_passwords.append({
-                'id': pw.id,
-                'service_name': pw.service_name,
-                'username': pw.username,
-                'password': cipher_suite.decrypt(pw.password).decode(),  # Decrypt here
-                'notes': pw.notes
-            })
-            
-        return render_template('dashboard.html', passwords=decrypted_passwords, error=error_msg)
-    else:
-        return redirect(url_for('index_route'))
+    try:
+        return render_template('dashboard.html',
+                               passwords=item_metadata(g.authenticated_user),
+                               error=request.args.get('error'))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Vault metadata request failed.')
+        return 'Vault unavailable.', 500
 
 
 @require_web_user()
-def select_password_for_edit():
+def select_password_for_edit(item_id):
+    if not valid_item_id(item_id):
+        return 'Item unavailable.', 404
+    try:
+        actor = g.authenticated_user
+        selected = item_metadata(actor, item_id)
+        if not selected:
+            return 'Item unavailable.', 404
+        selected = selected[0]
+        if selected['can_edit']:
+            # Explicit projection: no Password object or encrypted field enters
+            # template context, including this owner-only recipient metadata.
+            users = User.query.with_entities(User.auth_identity, User.username).join(Password.shared_users).filter(
+                Password.item_id == item_id, Password.user_id == actor.id).all()
+            selected['shared_users'] = [
+                {'auth_identity': user.auth_identity, 'username': user.username}
+                for user in users]
+        return render_template('dashboard.html', selected_password=selected,
+                               passwords=item_metadata(actor),
+                               error=request.args.get('error'))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Vault metadata request failed.')
+        return 'Vault unavailable.', 500
 
-    service_name = request.args.get('service_name')
-    error_msg = request.args.get('error')
-    
-    if not service_name:
-        return redirect(url_for('dashboard_route'))
 
-    key = current_app.config['ENCRYPTION_KEY']
-    cipher_suite = Fernet(key)
+@require_web_user(json_response=True)
+def reveal_password(item_id):
+    try:
+        item = resolve_item(g.authenticated_user, item_id)
+        if item is None:
+            return jsonify({'error': 'Item unavailable'}), 404
+        value = Fernet(current_app.config['ENCRYPTION_KEY']).decrypt(item.password).decode()
+        return jsonify({'item_id': item.item_id, 'password': value})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Item reveal failed.')
+        return jsonify({'error': 'Unable to reveal item'}), 500
 
-    current_user = g.authenticated_user
 
-    if current_user:
-        # Fetch the selected password for editing (owned or shared)
-        selected_password = Password.query.filter(
-            (Password.user_id == current_user.id) |
-            (Password.shared_users.any(id=current_user.id)),
-            Password.service_name == service_name
-        ).first()
-
-        if selected_password:
-            
-            user_passwords = Password.query.filter(
-                (Password.user_id == current_user.id) |
-                (Password.shared_users.any(id=current_user.id))
-            ).all()
-
-            # Decrypt the password
-            decrypted_password = cipher_suite.decrypt(selected_password.password).decode()
-
-            # Pass decrypted data to template
-            return render_template(
-                'dashboard.html',
-                selected_password={
-                    'id': selected_password.id,
-                    'service_name': selected_password.service_name,
-                    'username': selected_password.username,
-                    'password': decrypted_password,
-                    'notes': selected_password.notes,
-                    'shared_users': [{'id': u.id, 'username': u.username} for u in selected_password.shared_users],
-                    'owner_id': selected_password.user_id
-                },
-                passwords=user_passwords,
-                error=error_msg
-                )
-        
-        else:
-            return redirect(url_for('dashboard_route'))
-    else:
-        return redirect(url_for('index_route'))
+@require_web_user()
+def retired_web_vault():
+    return 'This vault route is retired. Open the dashboard to select an item.', 410
 
 
 def logout():
@@ -412,117 +384,93 @@ def search_user():
 
     user = User.query.filter_by(username=username).first()
     if user and user.id != session['user_id']:
-        return jsonify({'found': True, 'id': user.id, 'username': user.username})
+        return jsonify({'found': True, 'auth_identity': user.auth_identity, 'username': user.username})
     return jsonify({'found': False})
 
 
 @require_web_user()
 def add_password():
-    
-    key = current_app.config['ENCRYPTION_KEY']
-    cipher_suite = Fernet(key)
-
-    # Get the form data
-    service = request.form['service']
-    password = request.form['password']
-    new_username = request.form['username']
-    notes = request.form['notes']
-    shared_user_ids = request.form.getlist('shared_users')
-
-    # Get the current user
-    current_user = g.authenticated_user
-
-    if current_user:
-        encrypted_password = cipher_suite.encrypt(password.encode())
-        shared_users = []
-        if shared_user_ids:
-            shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
-
-        new_password = Password(service_name=service, username=new_username, password=encrypted_password, notes=notes, user_id=current_user.id, shared_users=shared_users)
-        db.session.add(new_password)
-        db.session.commit()
-
-        log_event(f"User {current_user.username} added a password.", "PASSWORD_ADD", current_user.id)
-        if shared_user_ids:
-            log_event(f"User {current_user.username} shared password for {service} with users: {', '.join(shared_user_ids)}", "PASSWORD_SHARE", current_user.id)
-
-    return redirect(url_for('dashboard_route'))
-
-
-@require_web_user()
-def update_password(service):
     from audit_events import stage_event
-
-    password_id = request.form.get('pw_id')
-    username = request.form.get('username')
-    password = request.form.get('password')
-    notes = request.form.get('notes')
-    shared_user_ids = request.form.getlist('shared_users')
-
-    # Validate all submitted identifiers and required fields before any writes.
-    # Empty stored credentials remain allowed under the legacy vault policy;
-    # account-password complexity rules do not apply to stored credentials.
-    if username is None or password is None or password_id is None:
-        return 'Invalid password update.', 400
+    if any(key in request.form for key in ('item_id', 'pw_id', 'id')):
+        return 'Invalid password creation.', 400
+    if any(request.form.get(field) is None for field in ('service', 'username', 'password')):
+        return 'Invalid password creation.', 400
+    actor = g.authenticated_user
     try:
-        identifiers = [password_id, *shared_user_ids]
-        if any(not re.fullmatch(r'[0-9]+', value) for value in identifiers):
-            return 'Invalid password update.', 400
-        password_id = int(password_id)
-        shared_ids = {int(value) for value in shared_user_ids}
-        if password_id <= 0 or any(value <= 0 for value in shared_ids):
-            return 'Invalid password update.', 400
-    except ValueError:
-        return 'Invalid password update.', 400
-
-    current_user = g.authenticated_user
-    try:
-        password_to_update = Password.query.filter_by(id=password_id).first()
-        if not password_to_update or password_to_update.user_id != current_user.id:
-            return redirect(url_for('dashboard_route'))
-
-        shared_users = User.query.filter(User.id.in_(shared_ids)).all() if shared_ids else []
-        if {user.id for user in shared_users} != shared_ids:
-            return 'Invalid password update.', 400
-
-        # Finish encryption before changing fields or share relationships.
-        cipher_suite = Fernet(current_app.config['ENCRYPTION_KEY'])
-        encrypted_password = cipher_suite.encrypt(password.encode())
-        password_to_update.username = username
-        password_to_update.notes = notes
-        password_to_update.password = encrypted_password
-        password_to_update.shared_users = shared_users
-        stage_event(
-            f"User {current_user.username} updated password share for {password_id}. "
-            f"Password now shared with {sorted(shared_ids)}",
-            'PASSWORD_SHARE', current_user.id,
-        )
-        # The credential, shares and success audit are one deliberate transaction.
+        recipients = resolve_recipients(request.form.getlist('shared_users'))
+        if recipients is None:
+            return 'Invalid password creation.', 400
+        encrypted = Fernet(current_app.config['ENCRYPTION_KEY']).encrypt(
+            request.form['password'].encode())
+        item = Password(service_name=request.form['service'],
+                        username=request.form['username'], password=encrypted,
+                        notes=request.form.get('notes'), user_id=actor.id,
+                        shared_users=recipients)
+        db.session.add(item)
+        stage_event(f'User {actor.username} added a password.', 'PASSWORD_ADD', actor.id)
         db.session.commit()
     except Exception:
         db.session.rollback()
-        # Neither response nor diagnostic should include secret-bearing exception text.
-        current_app.logger.error('Password update failed; transaction rolled back.')
-        return 'Unable to update password.', 500
-
+        current_app.logger.error('Password creation failed; transaction rolled back.')
+        return 'Unable to add password.', 500
     return redirect(url_for('dashboard_route'))
 
 
 @require_web_user()
-def delete_password(service):
-    
-    # Get the password ID from the form and find it in the database
-    password_id = request.form['pw_id']
-    password_entry = Password.query.filter_by(id=password_id).first()
-    current_user = g.authenticated_user
-
-    # Delete the password entry if it exists and belongs to the user
-    if password_entry and password_entry.user_id == current_user.id:
-        db.session.delete(password_entry)
+def update_password(item_id):
+    from audit_events import stage_event
+    # The canonical path is the sole selector. Reject legacy/caller identity fields.
+    if any(key in request.form for key in ('item_id', 'pw_id', 'id')):
+        return 'Invalid password update.', 400
+    username = request.form.get('username')
+    replace = request.form.get('replace_password')
+    if (username is None or replace not in (None, '1')
+            or (replace == '1' and 'password' not in request.form)):
+        return 'Invalid password update.', 400
+    actor = g.authenticated_user
+    try:
+        item = resolve_item(actor, item_id, owner_only=True)
+        if item is None:
+            return 'Item unavailable.', 404
+        recipients = resolve_recipients(request.form.getlist('shared_users'))
+        if recipients is None:
+            return 'Invalid password update.', 400
+        encrypted = None
+        if replace == '1':
+            encrypted = Fernet(current_app.config['ENCRYPTION_KEY']).encrypt(
+                request.form['password'].encode())
+        item.username = username
+        item.notes = request.form.get('notes')
+        if encrypted is not None:
+            item.password = encrypted
+        item.shared_users = recipients
+        stage_event(f'User {actor.username} updated password {item.item_id}.',
+                    'PASSWORD_SHARE', actor.id)
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Password update failed; transaction rolled back.')
+        return 'Unable to update password.', 500
+    return redirect(url_for('dashboard_route'))
 
-        log_event(f"User {session['username']} deleted a password.", "PASSWORD_DELETE", session['user_id'])
-    
+
+@require_web_user()
+def delete_password(item_id):
+    from audit_events import stage_event
+    if any(key in request.form for key in ('item_id', 'pw_id', 'id')):
+        return 'Invalid password deletion.', 400
+    actor = g.authenticated_user
+    try:
+        item = resolve_item(actor, item_id, owner_only=True)
+        if item is None:
+            return 'Item unavailable.', 404
+        db.session.delete(item)
+        stage_event(f'User {actor.username} deleted a password.', 'PASSWORD_DELETE', actor.id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Password deletion failed; transaction rolled back.')
+        return 'Unable to delete password.', 500
     return redirect(url_for('dashboard_route'))
 
 
