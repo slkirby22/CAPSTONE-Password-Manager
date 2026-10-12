@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytz
 from models import db, audit_log
+from diagnostics import report_failure, rollback_safely
 
 est = pytz.timezone('US/Eastern')
 
@@ -28,6 +29,6 @@ def log_event(message, event_type, user_id=None):
     try:
         stage_event(message, event_type, user_id)
         db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error logging event: {e}")
+    except Exception:
+        rollback_safely()
+        report_failure('audit_write_failed')

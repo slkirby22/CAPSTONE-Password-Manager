@@ -6,6 +6,7 @@ from cryptography.fernet import Fernet
 import re
 import pytz
 from audit_events import log_event
+from diagnostics import report_failure, rollback_safely
 from authorization import current_web_user, require_web_user, USER_MANAGERS, can_manage_user, can_assign_role
 from vault_access import item_metadata, resolve_item, resolve_recipients, valid_item_id
 
@@ -48,17 +49,17 @@ def login():
             if user.failed_login_attempts <= 3:
                 try:
                     if pwd_context.verify(password, user.password):
+                        log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
+
+                        user.failed_login_attempts = 0
+                        db.session.commit()
+
                         session.clear()
                         session['auth_identity'] = user.auth_identity
                         session['username'] = user.username
                         session['user_id'] = user.id
                         session['role'] = user.role
                         session.permanent = True
-
-                        log_event(f"User {user.username} logged in.", "USER_LOGIN", user.id)
-
-                        user.failed_login_attempts = 0
-                        db.session.commit()
 
                         return redirect(url_for('dashboard_route'))
                     else:
@@ -67,8 +68,10 @@ def login():
                         db.session.commit()
                         return render_template('login.html', error=error_message)
 
-                except Exception as e:
-                    print(f"Error verifying password: {e}")
+                except Exception:
+                    rollback_safely()
+                    session.clear()
+                    report_failure('web_login_failed')
                     return render_template('login.html', error=error_message)
             else:
                 log_event(
