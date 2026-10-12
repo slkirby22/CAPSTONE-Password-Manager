@@ -568,6 +568,8 @@ def audit_log_viewer():
     
     # Get current user and their role for authorization
     current_user = User.query.filter_by(id=session['user_id']).first()
+    if current_user is None:
+        return redirect(url_for('index_route'))
     current_user_role = current_user.role
 
     if current_user_role not in ['admin']:
@@ -584,6 +586,16 @@ def audit_log_viewer():
 
 
 def get_audit_logs():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    # Resolve the current database role; session roles can be stale.
+    current_user = User.query.filter_by(id=session['user_id']).first()
+    if current_user is None:
+        return jsonify({'error': 'Authentication required'}), 401
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Administrator access required'}), 403
+
     # Get the start and end dates from the request
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
