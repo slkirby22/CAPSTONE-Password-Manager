@@ -5,7 +5,7 @@ COPY requirements/runtime.txt /app/requirements/runtime.txt
 RUN pip install --no-cache-dir -r requirements/runtime.txt \
     && useradd --uid 10001 --create-home appuser \
     && mkdir /data && chown appuser:appuser /data
-COPY app.py api_functions.py functions.py models.py config.py /app/
+COPY app.py api_functions.py functions.py models.py config.py authorization.py audit_events.py /app/
 COPY templates /app/templates
 COPY static /app/static
 COPY deployment/start.sh /app/deployment/start.sh
