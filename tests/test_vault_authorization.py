@@ -1,5 +1,6 @@
 """Object-level vault access through real routes and disposable synthetic data."""
-from auth_helpers import auth_identity_for
+from authorization import authentication_claims
+from auth_helpers import auth_identity_for, credential_binding_for
 import sys
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def set_web_identity(client, user_id, cached_role='admin'):
         session.clear()
         session['user_id'] = user_id
         session['auth_identity'] = auth_identity_for(client, user_id)
+        session['credential_binding'] = credential_binding_for(client, user_id)
         session['username'] = 'UNTRUSTED_CACHED_USERNAME'
         session['role'] = cached_role
 
@@ -65,8 +67,7 @@ def set_web_identity(client, user_id, cached_role='admin'):
 def token_headers(user_id):
     with app.app_context():
         user = db.session.get(User, user_id)
-        token = create_access_token(identity=str(user_id), additional_claims={
-            'auth_identity': user.auth_identity if user else '0' * 32})
+        token = create_access_token(identity=str(user_id), additional_claims=authentication_claims(user, 'jwt') if user else {})
     return {'Authorization': f'Bearer {token}'}
 
 

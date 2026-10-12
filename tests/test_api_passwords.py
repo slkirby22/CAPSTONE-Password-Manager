@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import jwt
 import pytest
 from cryptography.fernet import Fernet
+from authorization import authentication_claims
 from flask_jwt_extended import create_access_token
 from sqlalchemy import event
 
@@ -60,7 +61,7 @@ def token_for(username='OWNER', **kwargs):
     with app.app_context():
         user = User.query.filter_by(username=username).one()
         return create_access_token(identity=str(user.id),
-                                   additional_claims={'auth_identity': user.auth_identity}, **kwargs)
+                                   additional_claims=authentication_claims(user, 'jwt'), **kwargs)
 
 
 def snapshot():
@@ -152,9 +153,9 @@ def test_authentication_still_precedes_retirement(vault_client, monkeypatch, met
 def test_web_cookie_never_authorizes_retired_api(vault_client, monkeypatch, method, path):
     with app.app_context():
         user = User.query.filter_by(username='OWNER').one()
-        user_id, binding = user.id, user.auth_identity
+        user_id, claims = user.id, authentication_claims(user, 'web')
     with vault_client.session_transaction() as session:
-        session.update(user_id=user_id, auth_identity=binding, username='OWNER', role='employee')
+        session.update(user_id=user_id, **claims, username='OWNER', role='employee')
     assert_read_only_response(vault_client, monkeypatch, method, path, expected=401)
 
 

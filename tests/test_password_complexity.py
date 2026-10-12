@@ -1,4 +1,4 @@
-from auth_helpers import auth_identity_for
+from auth_helpers import auth_identity_for, credential_binding_for
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
@@ -60,6 +60,7 @@ def test_add_password_accepts_weak(client):
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
+        sess['credential_binding'] = credential_binding_for(client, 1)
         sess['username'] = 'TESTUSER'
         sess['role'] = 'employee'
     resp = client.post('/add_password', data={'service':'svc','username':'u','password':'short','notes':''})
@@ -81,6 +82,7 @@ def test_update_password_accepts_weak(client):
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
+        sess['credential_binding'] = credential_binding_for(client, 1)
         sess['username'] = 'TESTUSER'
         sess['role'] = 'employee'
     resp = client.post(f'/passwords/{item_id}/update', data={'replace_password':'1','username':'user','password':'123','notes':''})

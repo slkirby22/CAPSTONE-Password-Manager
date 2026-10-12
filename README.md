@@ -33,6 +33,14 @@ Existing disposable SQLite databases need the explicit
 starting this version. All existing web sessions and JWTs intentionally sign out;
 fresh login is required. New empty synthetic schemas include the binding.
 
+## Password changes and sessions
+
+Successful account password changes now invalidate all existing cookies and JWTs
+for that account. Reauthentication is required. See the
+[revocation contract and upgrade limits](Documentation/password-session-revocation.md).
+This adds no schema migration; pre-upgrade credentials intentionally sign out.
+Lock and logout scope remain unchanged.
+
 ## Test locally
 
 Python 3.12 and Node 22 are required for the prepared CI path:

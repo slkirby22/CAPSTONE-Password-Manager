@@ -9,7 +9,7 @@ import pytest
 from flask import Flask
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
-from authorization import register_jwt_current_user
+from authorization import register_jwt_current_user, authentication_claims
 from models import User, db
 from scripts.migrate_account_identity import migrate
 
@@ -112,7 +112,7 @@ def test_migrated_model_issues_new_bindings_and_rejects_legacy_jwt(legacy_db):
     with app.app_context():
         legacy = create_access_token(identity='1')
         user = db.session.get(User, 1)
-        current = create_access_token(identity='1', additional_claims={'auth_identity': user.auth_identity})
+        current = create_access_token(identity='1', additional_claims=authentication_claims(user, 'jwt'))
         new = User('SYNTHETIC_NEW', 'unused', 'employee')
         db.session.add(new)
         db.session.commit()

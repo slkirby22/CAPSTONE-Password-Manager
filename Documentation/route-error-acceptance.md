@@ -18,7 +18,8 @@ The following access labels describe view-level checks, after shared middleware:
 
 - **Public**: no authenticated identity required.
 - **Web**: current database user matching the cookie's integer `user_id` and
-  32-character lowercase hexadecimal `auth_identity`. Missing, malformed,
+  32-character lowercase hexadecimal `auth_identity`, plus the current
+  64-character `credential_binding`. Missing, malformed,
   deleted, legacy, or mismatched bindings fail closed; a stale bound session is
   cleared. Cached role/username values are only refreshed display state.
 - **Manager**: Web plus current database role `admin` or `manager` and the target
@@ -27,7 +28,8 @@ The following access labels describe view-level checks, after shared middleware:
   `/` (302).
 - **Admin**: Web plus current database role `admin`.
 - **JWT**: bearer header only, signature/expiry/blocklist validation plus a
-  current database account matching string numeric `sub` and `auth_identity`.
+  current database account matching string numeric `sub`, `auth_identity`, and
+  current `credential_binding`.
   A cookie alone never grants API access. JWT authorization does not require an
   administrator role.
 
@@ -58,7 +60,7 @@ state, or a specifically listed legacy audit write.
 | `/create_user` / `create_user_route` | GET, HEAD, OPTIONS, POST | Manager; POST CSRF | GET/HEAD 200 form. POST successful create 302 `/dashboard`; invalid role/password or duplicate username renders 200 validation message; missing required form key 400. New user and best-effort separate success audit; see role/transaction caveats. |
 | `/view_users` / `view_users_route` | GET, HEAD, OPTIONS, POST | Manager; POST CSRF | 200 account-list/selection HTML; allowed selection attempts `USER_VIEW` audit even on GET/HEAD. POST reads `selected_user_id`; unavailable target renders list, forbidden target redirects `/view_users?error=...` (302). No target account mutation. |
 | `/select_user_for_edit` / `select_user_for_edit_route` | GET, HEAD, OPTIONS, POST | Manager; POST CSRF | Alias to the working `view_users` helper with the same list/selection, target checks, and audit behavior. |
-| `/update_user/<user_id>` / `update_user_route` | OPTIONS, POST | Manager; CSRF | Permitted other-user update renders 200; self-update redirects `/logout` (302), with role preserved. Missing/forbidden target or invalid role assignment redirects `/view_users` (302, with error where applicable); invalid password or taken username renders 200. Missing required form key 400. Commits username/password/role before separate audit and final rendering. |
+| `/update_user/<user_id>` / `update_user_route` | OPTIONS, POST | Manager; CSRF | Permitted other-user update renders 200; self-update redirects `/logout` (302), with role preserved. Missing/forbidden target or invalid role assignment redirects `/view_users` (302, with error where applicable); invalid password or taken username renders 200. Missing required form key 400. Commits username/password/role before separate audit and final rendering. A nonblank password replacement atomically invalidates prior cookies/JWTs; self password change immediately clears this cookie. Blank-password edits do not revoke other sessions. |
 | `/delete_user/<user_id>` / `delete_user_route` | OPTIONS, POST | Manager; CSRF | Permitted target deletion commits target's owned vault rows and user deletion, then separate audit; 302 `/view_users`. Missing or forbidden target also 302 with error. Self-deletion denied. Retention/offboarding policy remains open. |
 | `/lock_account/<user_id>` / `lock_account_route` | OPTIONS, POST | Manager; CSRF | Permitted change sets failed-login counter to 4, commits, attempts audit, and renders 200. Already locked renders 200 without counter change. Missing/forbidden target 302 `/view_users?error=...`; self-lock denied. Does not revoke existing auth. |
 | `/unlock_account/<user_id>` / `unlock_account_route` | OPTIONS, POST | Manager; CSRF | Permitted change sets counter to 0, commits, attempts audit, and renders 200. Not locked renders 200 without counter change. Missing/forbidden target 302 `/view_users?error=...`; self-unlock denied. |
@@ -213,9 +215,9 @@ These are recorded gaps, not accidental claims of completed acceptance:
   wraps in `jsonify`; a race reaching it does not have a repaired 400 contract.
   Concurrent duplicate insertion may instead hit the unique constraint and
   generic 500. This patch does not introduce idempotency or race serialization.
-- **Existing-auth lifecycle:** Locking or changing a password does not rotate
-  `auth_identity` or revoke already issued cookies/JWTs. Self-update merely
-  redirects the current browser to logout; it is not global reset revocation.
+- **Existing-auth lifecycle:** Password replacements now invalidate prior
+  cookies/JWTs through the separate [credential binding](password-session-revocation.md),
+  without rotating `auth_identity`. Locking does not revoke existing sessions.
   Account deletion/recreation binding and next-request role/share checks exist,
   but no serializable concurrent authorization guarantee is added.
 - **Last administrator and deletion:** No minimum-admin invariant, approved
@@ -329,8 +331,9 @@ anonymous reveal with a valid CSRF session correctly causes 401. The different
 statuses reflected response ordering, not a reason to relax either assertion.
 
 The landing-page unload request is removed. Explicit logout and its cookie
-clearing remain unchanged; this does not introduce session revocation or settle
-pending lifecycle policy. The Chromium smoke deterministically dispatches
+clearing remained unchanged in that navigation correction; it did not introduce
+session revocation. The later [password-change policy](password-session-revocation.md)
+is documented separately. The Chromium smoke deterministically dispatches
 `beforeunload` while the document remains alive, awaits any real logout fetch,
 and requires zero requests. It also counts actual navigation logout requests,
 waits for explicit logout navigation, and asserts exact missing-CSRF 400 and
