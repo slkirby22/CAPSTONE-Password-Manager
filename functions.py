@@ -451,37 +451,59 @@ def add_password():
 
 @require_web_user()
 def update_password(service):
+    from audit_events import stage_event
 
-    # Get the form data
     password_id = request.form.get('pw_id')
     username = request.form.get('username')
     password = request.form.get('password')
     notes = request.form.get('notes')
     shared_user_ids = request.form.getlist('shared_users')
 
-    # Get the selected password to update
-    password_to_update = Password.query.filter_by(id=password_id).first()
+    # Validate all submitted identifiers and required fields before any writes.
+    # Empty stored credentials remain allowed under the legacy vault policy;
+    # account-password complexity rules do not apply to stored credentials.
+    if username is None or password is None or password_id is None:
+        return 'Invalid password update.', 400
+    try:
+        identifiers = [password_id, *shared_user_ids]
+        if any(not re.fullmatch(r'[0-9]+', value) for value in identifiers):
+            return 'Invalid password update.', 400
+        password_id = int(password_id)
+        shared_ids = {int(value) for value in shared_user_ids}
+        if password_id <= 0 or any(value <= 0 for value in shared_ids):
+            return 'Invalid password update.', 400
+    except ValueError:
+        return 'Invalid password update.', 400
+
     current_user = g.authenticated_user
+    try:
+        password_to_update = Password.query.filter_by(id=password_id).first()
+        if not password_to_update or password_to_update.user_id != current_user.id:
+            return redirect(url_for('dashboard_route'))
 
-    if password_to_update and password_to_update.user_id != current_user.id:
-        return redirect(url_for('dashboard_route'))
+        shared_users = User.query.filter(User.id.in_(shared_ids)).all() if shared_ids else []
+        if {user.id for user in shared_users} != shared_ids:
+            return 'Invalid password update.', 400
 
-    if password_to_update:
-        # Update the password's fields
+        # Finish encryption before changing fields or share relationships.
+        cipher_suite = Fernet(current_app.config['ENCRYPTION_KEY'])
+        encrypted_password = cipher_suite.encrypt(password.encode())
         password_to_update.username = username
         password_to_update.notes = notes
-        if shared_user_ids is not None:
-            password_to_update.shared_users = User.query.filter(User.id.in_(shared_user_ids)).all()
-            log_event(f"User {session['username']} updated password share for {password_id}. Password now shared with {shared_user_ids}", "PASSWORD_SHARE", session['user_id'])
-
-        # Encrypt the password before saving it back to the database
-        key = current_app.config['ENCRYPTION_KEY']
-        cipher_suite = Fernet(key)
-        encrypted_password = cipher_suite.encrypt(password.encode())
         password_to_update.password = encrypted_password
-
-        # Commit changes to the database
+        password_to_update.shared_users = shared_users
+        stage_event(
+            f"User {current_user.username} updated password share for {password_id}. "
+            f"Password now shared with {sorted(shared_ids)}",
+            'PASSWORD_SHARE', current_user.id,
+        )
+        # The credential, shares and success audit are one deliberate transaction.
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # Neither response nor diagnostic should include secret-bearing exception text.
+        current_app.logger.error('Password update failed; transaction rolled back.')
+        return 'Unable to update password.', 500
 
     return redirect(url_for('dashboard_route'))
 
