@@ -9,14 +9,43 @@ from datetime import datetime
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 
 def authenticate_and_get_token(username, password):
-    """Authenticate user and return JWT if valid"""
-    user = User.query.filter_by(username=username.upper()).first()
-    if not user or not pwd_context.verify(password, user.password):
+    """Return a JWT on success, or None for every authentication failure."""
+    if not isinstance(username, str) or not isinstance(password, str):
         return None
-    
+    if not username or not password:
+        return None
+
+    user = User.query.filter_by(username=username.upper()).first()
+    if not user:
+        return None
+
+    # Match the web login's existing fourth-failure lockout threshold without
+    # revealing either account existence or lock state in the API response.
     if user.failed_login_attempts > 3:
-        return {"error": "Account locked"}, 403
-    
+        log_event(
+            f"Account locked for user {user.username} during API login.",
+            "ACCOUNT_LOCKED",
+            user.id,
+        )
+        return None
+
+    try:
+        password_matches = pwd_context.verify(password, user.password)
+    except (TypeError, ValueError):
+        # Unsupported/corrupt stored hashes and oversized passwords fail closed.
+        password_matches = False
+
+    if not password_matches:
+        # Increment in the database so concurrent API failures are not lost.
+        user.failed_login_attempts = User.failed_login_attempts + 1
+        db.session.commit()
+        log_event(
+            f"Failed API login attempt for user {user.username}.",
+            "FAILED_LOGIN",
+            user.id,
+        )
+        return None
+
     # Reset failed attempts on success
     user.failed_login_attempts = 0
     db.session.commit()

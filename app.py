@@ -183,7 +183,14 @@ def api_login():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
         
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON object required"}), 400
+
+    if any(not isinstance(data.get(field), str) or not data[field]
+           for field in ('username', 'password')):
+        return jsonify({"error": "Username and password must be non-empty strings"}), 400
+
     result = authenticate_and_get_token(
         username=data.get('username'),
         password=data.get('password')
@@ -191,8 +198,6 @@ def api_login():
     
     if not result:
         return jsonify({"error": "Invalid credentials"}), 401
-    elif "error" in result:
-        return jsonify(result), 403
     
     return jsonify(result), 200
 
