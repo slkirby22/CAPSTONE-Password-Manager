@@ -375,3 +375,57 @@ def test_real_limiter_preserves_generic_429(client, monkeypatch, caplog, capfd):
         clean(response, caplog, capfd)
     finally:
         limiter.reset()
+
+
+
+def test_landing_page_unload_does_not_send_logout(client):
+    # Execute the actual response's inline scripts in a minimal JS event harness.
+    # Deterministic dispatch catches the historical handler even when Chromium
+    # would cancel the network fetch during navigation and mask the race.
+    import json
+    import subprocess
+    response = client.get('/')
+    assert response.status_code == 200
+    scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', response.text, re.S)
+    program = r"""
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const scripts = JSON.parse(process.argv[1]);
+const requests = [];
+const listeners = {};
+const window = {addEventListener: (event, callback) => {
+    (listeners[event] ||= []).push(callback);
+}};
+const context = vm.createContext({window, fetch: target => {
+    requests.push(String(target));
+    return Promise.resolve({status: 200});
+}});
+for (const script of scripts) vm.runInContext(script, context);
+for (const event of ['beforeunload', 'pagehide', 'unload']) {
+    if (typeof window['on' + event] === 'function') window['on' + event]();
+    for (const callback of listeners[event] || []) callback();
+}
+assert.deepEqual(requests, [], 'Landing-page departure must not mutate session');
+"""
+    result = subprocess.run(['node', '-e', program, json.dumps(scripts)],
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+
+
+def test_anonymous_csrf_precedes_auth_and_explicit_logout_clears_it(client):
+    token = csrf(client)
+    missing = client.post('/passwords/not-an-id/reveal', base_url='https://localhost',
+                          headers={'Referer': 'https://localhost/login'})
+    assert (missing.status_code, missing.get_json()) == (400, {'error': 'The CSRF token is missing.'})
+    anonymous = post(client, '/passwords/not-an-id/reveal', token=token)
+    assert (anonymous.status_code, anonymous.get_json()) == (401, {'error': 'Authentication required'})
+    # Reproduce the old late-response race as a deterministic request order.
+    # This remains expected for an explicit logout; index departure must not
+    # silently issue that request behind the newly rendered login form.
+    logout = client.get('/logout', base_url='https://localhost')
+    assert logout.status_code == 302
+    assert 'Max-Age=0' in logout.headers['Set-Cookie']
+    stale = post(client, '/passwords/not-an-id/reveal', token=token)
+    assert (stale.status_code, stale.get_json()) == (400, {'error': 'The CSRF session token is missing.'})
+    fresh = post(client, '/passwords/not-an-id/reveal', token=csrf(client))
+    assert (fresh.status_code, fresh.get_json()) == (401, {'error': 'Authentication required'})

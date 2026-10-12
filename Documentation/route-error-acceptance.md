@@ -312,3 +312,29 @@ remains useful regression coverage when the required test-only browser packages
 are available. Neither route tests nor browser smoke constitute production
 approval or independent security review. Historical milestone documents describe
 their own point-in-time routes; this inventory describes the current URL map.
+
+## Browser navigation regression correction
+
+A subsequent check found inconsistent CI on initial PR #29 head
+`ad118a3a6ef160678e7dd9900ec806f8b977dd0e`: the PR-triggered run passed, while
+push run `38315225155` failed the anonymous reveal assertion with 400 rather
+than 401. The earlier PR-only verification was insufficient to call that head's
+CI uniformly successful.
+
+The public landing page still installed a `beforeunload` handler that fetched
+`/logout`. Leaving that page for `/login` could race an incidental logout
+response's session-cookie deletion against the login form's newly issued CSRF
+cookie. A missing CSRF session correctly causes 400 before authentication;
+anonymous reveal with a valid CSRF session correctly causes 401. The different
+statuses reflected response ordering, not a reason to relax either assertion.
+
+The landing-page unload request is removed. Explicit logout and its cookie
+clearing remain unchanged; this does not introduce session revocation or settle
+pending lifecycle policy. The Chromium smoke deterministically dispatches
+`beforeunload` while the document remains alive, awaits any real logout fetch,
+and requires zero requests. It also counts actual navigation logout requests,
+waits for explicit logout navigation, and asserts exact missing-CSRF 400 and
+valid-anonymous 401 JSON bodies. Python/Node regression coverage executes the
+actual rendered inline scripts and reproduces the late-logout cookie/CSRF order
+with public fixtures. Both push-triggered and PR-triggered CI must be checked
+on the corrected exact head; a successful PR run alone is insufficient.

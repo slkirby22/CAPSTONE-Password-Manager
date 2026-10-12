@@ -26,6 +26,8 @@ function ciphertext() {
     await page.clock.install();
     const failures = [];
     page.on('pageerror', error => failures.push(error.message));
+    let logoutCount = 0;
+    page.on('request', request => { if (new URL(request.url()).pathname === '/logout') logoutCount++; });
     let revealCount = 0;
     page.on('request', request => { if (request.url().endsWith('/reveal')) revealCount++; });
     async function hidden() {
@@ -78,7 +80,29 @@ function ciphertext() {
         await page.waitForTimeout(75);
     }
     try {
+        await page.goto(`${base}/`);
+        // Dispatch deterministically while the document is alive: a real unload
+        // may cancel its fetch before the test sees it, hiding the cookie race.
+        const unloadLogouts = await page.evaluate(async () => {
+            const nativeFetch = window.fetch;
+            const pending = [];
+            window.fetch = (...args) => {
+                const response = nativeFetch(...args);
+                if (new URL(String(args[0]), location.href).pathname === '/logout') {
+                    pending.push(response);
+                }
+                return response;
+            };
+            try {
+                window.dispatchEvent(new Event('beforeunload'));
+                await Promise.all(pending);
+                return pending.length;
+            } finally { window.fetch = nativeFetch; }
+        });
+        assert.equal(unloadLogouts, 0, 'Landing-page unload must not issue a background logout');
+        console.log('PASS landing-page unload does not issue a session-clearing request');
         await login('BROWSEROWNER');
+        assert.equal(logoutCount, 0, 'Landing-to-login navigation must not issue logout');
         const metadata = await page.content();
         assert(!metadata.includes(firstSecret) && !metadata.includes(secondSecret));
         assert.equal(revealCount, 0);
@@ -143,19 +167,30 @@ function ciphertext() {
         console.log('PASS actual server JSON delayed after fetch: hide, repeated stale responses, and navigation/back cannot restore plaintext');
         await select(fixture.first);
         await reveal(replacement);
-        await page.getByRole('link', {name: 'Logout', exact: true}).click();
+        await Promise.all([
+            page.waitForURL(base + '/'),
+            page.getByRole('link', {name: 'Logout', exact: true}).click()
+        ]);
         assert(!(await page.content()).includes(replacement));
         await page.goBack();
         assert(!(await page.content()).includes(replacement));
         await page.goto(`${base}/login`);
         const anonymousCsrf = await page.locator('[name=csrf_token]').inputValue();
+        assert.equal(logoutCount, 1, 'Only the explicit logout action may issue logout');
+        const missingCsrf = await page.evaluate(async id => {
+            const response = await fetch(`/passwords/${id}/reveal`, {
+                method: 'POST', credentials: 'same-origin'
+            });
+            return {status: response.status, body: await response.json()};
+        }, fixture.first);
+        assert.deepEqual(missingCsrf, {status: 400, body: {error: 'The CSRF token is missing.'}});
         const denied = await page.evaluate(async ({id, csrf}) => {
             const response = await fetch(`/passwords/${id}/reveal`, {
                 method: 'POST', headers: {'X-CSRFToken': csrf}, credentials: 'same-origin'
             });
-            return response.status;
+            return {status: response.status, body: await response.json()};
         }, {id: fixture.first, csrf: anonymousCsrf});
-        assert.equal(denied, 401);
+        assert.deepEqual(denied, {status: 401, body: {error: 'Authentication required'}});
         await login('BROWSERSHARED');
         assert.equal(await page.locator('nav a').count(), 1);
         await select(fixture.first);
