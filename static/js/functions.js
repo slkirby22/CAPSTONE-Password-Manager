@@ -23,8 +23,17 @@ document.addEventListener('DOMContentLoaded', () => {
         generateBtn.addEventListener('click', () => {
             const target = document.getElementById('new-password');
             if (target) {
-                target.value = generatePassword(12);
-                updateStrengthFeedback(target);
+                try {
+                    target.value = generatePassword(12);
+                    updateStrengthFeedback(target);
+                } catch (error) {
+                    // Fail closed: leave any existing input untouched.
+                    const feedback = document.getElementById('strength-' + target.id);
+                    if (feedback) {
+                        feedback.textContent = 'Secure password generation is unavailable. Use a browser with Web Crypto support.';
+                        feedback.style.color = 'red';
+                    }
+                }
             }
         });
     }
@@ -57,30 +66,46 @@ function togglePasswordList(passwordid) {
     }
 }
 
-function generatePassword(length) {
+// Rejection sampling avoids the bias of reducing every uint32 modulo bound.
+function secureRandomInt(bound) {
+    const range = 0x100000000;
+    if (!Number.isSafeInteger(bound) || bound < 1 || bound > range) {
+        throw new RangeError('Random bound must be an integer between 1 and 2^32.');
+    }
+    const cryptoProvider = globalThis.crypto;
+    if (!cryptoProvider || typeof cryptoProvider.getRandomValues !== 'function') {
+        throw new Error('Secure password generation requires Web Crypto.');
+    }
+    const limit = range - (range % bound);
+    const sample = new Uint32Array(1);
+    do {
+        cryptoProvider.getRandomValues(sample);
+    } while (sample[0] >= limit);
+    return sample[0] % bound;
+}
+
+function generatePassword(length = 12) {
+    if (!Number.isSafeInteger(length)) {
+        throw new TypeError('Password length must be an integer.');
+    }
+    // Match the server policy's minimum, not just the four categories below.
+    length = Math.max(8, length);
     const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const lower = 'abcdefghijklmnopqrstuvwxyz';
     const digits = '0123456789';
-    const specials = '!@#$%^&*()_+~`|}{[]:;?><,./-=';
+    // Keep this alphabet aligned with password_meets_requirements in functions.py.
+    const specials = '!@#$%^&*(),.?":{}|<>';
+    const categories = [upper, lower, digits, specials];
+    const passwordChars = categories.map(alphabet => alphabet[secureRandomInt(alphabet.length)]);
 
-    if (length < 4) {
-        length = 4; // minimum to include one of each category
-    }
-
-    const passwordChars = [];
-    passwordChars.push(upper.charAt(Math.floor(Math.random() * upper.length)));
-    passwordChars.push(lower.charAt(Math.floor(Math.random() * lower.length)));
-    passwordChars.push(digits.charAt(Math.floor(Math.random() * digits.length)));
-    passwordChars.push(specials.charAt(Math.floor(Math.random() * specials.length)));
-
-    const all = upper + lower + digits + specials;
+    const all = categories.join('');
     for (let i = passwordChars.length; i < length; i++) {
-        passwordChars.push(all.charAt(Math.floor(Math.random() * all.length)));
+        passwordChars.push(all[secureRandomInt(all.length)]);
     }
 
-    // Shuffle to ensure random order
+    // Fisher–Yates: each swap index is sampled uniformly, including i itself.
     for (let i = passwordChars.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = secureRandomInt(i + 1);
         [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
     }
 
@@ -111,7 +136,7 @@ function updateStrengthFeedback(input) {
 
 // Export for Node.js testing
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generatePassword };
+    module.exports = { generatePassword, secureRandomInt };
 }
 
 function setupUserSearch(prefix) {
