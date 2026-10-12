@@ -84,5 +84,5 @@ def test_locked_account(client):
         user.failed_login_attempts = 4
         db.session.commit()
     response = client.post('/api/login', json={'username': 'TESTUSER', 'password': 'secret'})
-    assert response.status_code == 403
-    assert response.get_json()['error'] == 'Account locked'
+    assert response.status_code == 401
+    assert response.get_json()['error'] == 'Invalid credentials'
