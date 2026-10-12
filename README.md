@@ -11,6 +11,13 @@ blocked pending its launch gates. Nothing deploys automatically from this setup.
 The isolated [runtime dependency remediation](Documentation/dependency-remediation.md)
 documents upgrade compatibility checks and the remaining security gates.
 
+## Account identity upgrade
+
+Existing disposable SQLite databases need the explicit
+[account identity migration](Documentation/account-identity-upgrade.md) before
+starting this version. All existing web sessions and JWTs intentionally sign out;
+fresh login is required. New empty synthetic schemas include the binding.
+
 ## Test locally
 
 Python 3.12 and Node 22 are required for the prepared CI path:

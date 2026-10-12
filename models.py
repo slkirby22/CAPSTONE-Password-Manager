@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pytz
+from uuid import uuid4
 
 est = pytz.timezone('US/Eastern')
 
@@ -16,6 +17,9 @@ password_user = db.Table(
 # Class models for User, Password, Audit Log, and Token Blacklist
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # Account incarnation, independent of recyclable numeric database IDs.
+    auth_identity = db.Column(db.String(32), unique=True, nullable=False,
+                              default=lambda: uuid4().hex)
     username = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False)

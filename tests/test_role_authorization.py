@@ -1,4 +1,5 @@
 """Legacy role matrix through actual routes using disposable synthetic records."""
+from auth_helpers import auth_identity_for
 import sys
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def sign_in(client, role='admin', target_role='employee', session_role='admin'):
         db.session.get(User, 2).role = target_role
         db.session.commit()
     with client.session_transaction() as session:
-        session.update(user_id=1, username='STALE_NAME', role=session_role)
+        session.update(user_id=1, auth_identity=auth_identity_for(client, 1), username='STALE_NAME', role=session_role)
 
 
 def snapshot():
