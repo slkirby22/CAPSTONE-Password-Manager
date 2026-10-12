@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify, g
 from models import db, User, Password, audit_log
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import re
 import pytz
+from audit_events import log_event
+from authorization import require_web_user, USER_MANAGERS, can_manage_user, can_assign_role
 
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
 est = pytz.timezone('US/Eastern')
@@ -25,20 +27,6 @@ def password_meets_requirements(password: str) -> bool:
 def index():
     return render_template('index.html')
 
-
-def log_event(message, event_type, user_id=None):
-    try:
-        new_log = audit_log(
-            event_time = datetime.now(est),
-            user_id = user_id,
-            event_message = message,
-            event_type = event_type
-        )
-        db.session.add(new_log)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error logging event: {e}")
 
 
 def login():
@@ -92,16 +80,15 @@ def login():
     return render_template('login.html')
 
 
+@require_web_user()
 def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
 
     error_msg = request.args.get('error')
 
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
 
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
 
     # Display the dashboard with decrypted passwords if the user is found
     if current_user:
@@ -126,9 +113,8 @@ def dashboard():
         return redirect(url_for('index_route'))
 
 
+@require_web_user()
 def select_password_for_edit():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
 
     service_name = request.args.get('service_name')
     error_msg = request.args.get('error')
@@ -139,7 +125,7 @@ def select_password_for_edit():
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
 
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
 
     if current_user:
         # Fetch the selected password for editing (owned or shared)
@@ -197,21 +183,23 @@ def logout():
     return redirect(url_for('index_route'))
 
 
+@require_web_user(*USER_MANAGERS)
 def create_user():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
     
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
     current_user_role = current_user.role
 
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to create a user.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to create users."))
     
     if request.method == 'POST':
         username = request.form['username'].upper()
         password = request.form['password']
         role = request.form['role']
+
+        if not can_assign_role(current_user, role):
+            log_event(f'User {current_user.username} attempted a restricted account action.',
+                      'UNAUTHORIZED_ACTION', current_user.id)
+            return render_template('create_user.html', error="Invalid role, please try again.", current_user_role=current_user_role)
+
 
         # Password Policies
         if len(password) < 8:
@@ -230,12 +218,6 @@ def create_user():
         # Hash the password before storing it
         password = pwd_context.hash(password)
 
-        # Only allow certain roles based on the current user's role
-        if current_user_role == 'admin' and role not in ['admin', 'manager', 'employee']:
-            return render_template('create_user.html', error="Invalid role, please try again.")
-        if current_user_role == 'manager' and role not in ['employee']:
-            return render_template('create_user.html', error="Cannot create user with {role} role, please try again.")
-        
         if User.query.filter_by(username=username).first():
             return render_template('create_user.html', error="User already exists, please try again.")
         
@@ -251,18 +233,13 @@ def create_user():
     return render_template('create_user.html', current_user_role=current_user_role)
 
 
+@require_web_user(*USER_MANAGERS)
 def view_users():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
 
     # Get current user and their role for authorization
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
     current_user_role = current_user.role
 
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to view users.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to view users."))
-    
     users = User.query.all()
 
     # Handle form submission for selecting a user to edit
@@ -271,46 +248,29 @@ def view_users():
         selected_user_id = request.form.get('selected_user_id')
         selected_user = User.query.filter_by(id=selected_user_id).first()
 
+    if selected_user and not can_manage_user(current_user, selected_user, 'update'):
+        log_event(f'User {current_user.username} attempted a restricted account action.',
+                  'UNAUTHORIZED_ACTION', current_user.id)
+        return redirect(url_for('view_users_route', error="You are not authorized to edit this user."))
+
     log_event(f"User {current_user.username} viewed or selected user to edit.", "USER_VIEW", current_user.id)
 
     return render_template('view_users.html', users=users, selected_user=selected_user, current_user_role=current_user_role)
 
 
+@require_web_user(*USER_MANAGERS)
 def select_user_for_edit():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
-
-    # Get current user and their role for authorization
-    current_user = User.query.filter_by(id=session['user_id']).first()
-    current_user_role = current_user.role
-
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to edit a user without permission.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to edit users."))
-
-    if request.method == 'POST':
-        selected_user_id = request.form['selected_user_id']
-        return redirect(url_for('update_user', user_id=selected_user_id))
-
-    # Query all users and render the user selection page
-    users = User.query.all()
-
-    log_event(f"User {current_user.username} is viewing the user selection page.", "USER_VIEW", current_user.id)
-
-    return render_template('select_user_for_edit.html', users=users)
+    # Keep the legacy URL as an alias of the working selection form.
+    return view_users()
 
 
+@require_web_user(*USER_MANAGERS)
 def update_user(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
 
     # Get current user and their role for authorization
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
     current_user_role = current_user.role
 
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to update a user.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to update users."))
     
     # Fetch the user to be updated
     db_user = User.query.filter_by(id=user_id).first()
@@ -318,6 +278,18 @@ def update_user(user_id):
     # Make sure the form is passed correctly
     if not db_user:
         return redirect(url_for('view_users_route'))
+
+    if not can_manage_user(current_user, db_user, 'update'):
+        log_event(f'User {current_user.username} attempted a restricted account action.',
+                  'UNAUTHORIZED_ACTION', current_user.id)
+        return redirect(url_for('view_users_route', error="You are not authorized to update this user."))
+    # Self profile updates preserve the current role even with a crafted field.
+    new_role = (db_user.role if current_user.id == db_user.id
+                else request.form.get('role', db_user.role))
+    if not can_assign_role(current_user, new_role, db_user):
+        log_event(f'User {current_user.username} attempted a restricted account action.',
+                  'UNAUTHORIZED_ACTION', current_user.id)
+        return redirect(url_for('view_users_route', error="Invalid role assignment."))
 
     new_username = request.form['username'].upper()
 
@@ -349,13 +321,6 @@ def update_user(user_id):
     if new_username != db_user.username and User.query.filter_by(username=new_username).first():
         return render_template('view_users.html', error="Username taken, please try again.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
 
-    # Determine if user is updating their own account or someone else's
-    if session['user_id'] != int(user_id):
-        new_role = request.form.get('role', db_user.role)  # Role comes from the form
-    else:
-        new_role = current_user_role  # Keep the current role for self updates
-        session['username'] = new_username  # Update session with new username if updating own account
-
     # Update the user in the database
     db_user.username = new_username
     db_user.password = new_password
@@ -377,20 +342,21 @@ def update_user(user_id):
         return render_template('view_users.html', message="User updated successfully!", users=User.query.all(), messageonuser=updated_user.username, selected_user=updated_user)
 
 
+@require_web_user(*USER_MANAGERS)
 def delete_user(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
     
     # Get current user and their role for authorization
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
     current_user_role = current_user.role
     
-    if current_user_role not in ['admin', 'manager']:
-        log_event(f"User {current_user.username} attempted to delete a user.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to delete users."))
 
     # Fetch the user to be deleted
     db_user = User.query.filter_by(id=user_id).first()
+
+    if db_user and not can_manage_user(current_user, db_user, 'delete'):
+        log_event(f'User {current_user.username} attempted a restricted account action.',
+                  'UNAUTHORIZED_ACTION', current_user.id)
+        return redirect(url_for('view_users_route', error="You are not authorized to delete this user."))
 
     if db_user:
         # Delete all passwords associated with the user
@@ -409,58 +375,42 @@ def delete_user(user_id):
     return redirect(url_for('view_users_route', error="User not found."))
 
 
+def _set_account_lock(user_id, locked):
+    current_user = g.authenticated_user
+    target = User.query.filter_by(id=user_id).first()
+    if target is None:
+        return redirect(url_for('view_users_route', error="User not found."))
+    operation = 'lock' if locked else 'unlock'
+    if not can_manage_user(current_user, target, operation):
+        log_event(f'User {current_user.username} attempted a restricted account action.',
+                  'UNAUTHORIZED_ACTION', current_user.id)
+        return redirect(url_for('view_users_route', error="You are not authorized to change this account."))
+    if (target.failed_login_attempts > 3) == locked:
+        return render_template('view_users.html',
+                               error="Account already locked." if locked else "Account is not locked.",
+                               users=User.query.all(), erroronuser=target.username,
+                               selected_user=target, current_user_role=current_user.role)
+    target.failed_login_attempts = 4 if locked else 0
+    db.session.commit()
+    log_event(f"User {current_user.username} {operation}ed user {target.username}.",
+              'ACCOUNT_LOCK' if locked else 'ACCOUNT_UNLOCK', current_user.id)
+    return render_template('view_users.html', message="Account locked" if locked else "Account unlocked",
+                           users=User.query.all(), messageonuser=target.username,
+                           selected_user=target, current_user_role=current_user.role)
+
+
+@require_web_user(*USER_MANAGERS)
 def unlock_account(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
-    
-    # Find the user to unlock
-    db_user = User.query.filter_by(id=user_id).first()
-
-    if db_user:
-        if session['role'] in ['admin', 'manager']:
-            if db_user.failed_login_attempts > 3:
-                db_user.failed_login_attempts = 0
-                db.session.commit()
-
-                log_event(f"User {session['username']} unlocked user {db_user.username}.", "ACCOUNT_UNLOCK", session['user_id'])
-                return render_template('view_users.html', message="Account unlocked", users=User.query.all(), messageonuser=db_user.username, selected_user=db_user)
-            else:
-                return render_template('view_users.html', error="Account is not locked.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
-        else:
-            log_event(f"User {session['username']} attempted to unlock user {db_user.username} without proper authorization.", "UNAUTHORIZED_ACTION", session['user_id'])
-            return render_template('view_users.html', error="You are not authorized to unlock accounts.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
-    else:
-        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
+    return _set_account_lock(user_id, False)
 
 
+@require_web_user(*USER_MANAGERS)
 def lock_account(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
-
-    # Find the user to lock
-    db_user = User.query.filter_by(id=user_id).first()
-
-    if db_user:
-        if session['role'] in ['admin', 'manager']:
-            if db_user.failed_login_attempts <= 3:
-                db_user.failed_login_attempts = 4
-                db.session.commit()
-
-                log_event(f"User {session['username']} locked user {db_user.username}.", "ACCOUNT_LOCK", session['user_id'])
-                return render_template('view_users.html', message="Account locked", users=User.query.all(), messageonuser=db_user.username, selected_user=db_user)
-            else:
-                return render_template('view_users.html', error="Account already locked.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
-        else:
-            log_event(f"User {session['username']} attempted to lock user {db_user.username} without proper authorization.", "UNAUTHORIZED_ACTION", session['user_id'])
-            return render_template('view_users.html', error="You are not authorized to lock accounts.", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
-    else:
-        return render_template('view_users.html', error="User not found in database", users=User.query.all(), erroronuser=db_user.username, selected_user=db_user)
+    return _set_account_lock(user_id, True)
 
 
+@require_web_user(search_response=True)
 def search_user():
-    if 'user_id' not in session:
-        return jsonify({'found': False})
-
     username = request.args.get('username', '').upper()
     if not username:
         return jsonify({'found': False})
@@ -471,9 +421,8 @@ def search_user():
     return jsonify({'found': False})
 
 
+@require_web_user()
 def add_password():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
     
     key = current_app.config['ENCRYPTION_KEY']
     cipher_suite = Fernet(key)
@@ -486,7 +435,7 @@ def add_password():
     shared_user_ids = request.form.getlist('shared_users')
 
     # Get the current user
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
 
     if current_user:
         encrypted_password = cipher_suite.encrypt(password.encode())
@@ -505,9 +454,8 @@ def add_password():
     return redirect(url_for('dashboard_route'))
 
 
+@require_web_user()
 def update_password(service):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
 
     # Get the form data
     password_id = request.form.get('pw_id')
@@ -518,7 +466,7 @@ def update_password(service):
 
     # Get the selected password to update
     password_to_update = Password.query.filter_by(id=password_id).first()
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
 
     if password_to_update and password_to_update.user_id != current_user.id:
         return redirect(url_for('dashboard_route'))
@@ -543,14 +491,13 @@ def update_password(service):
     return redirect(url_for('dashboard_route'))
 
 
+@require_web_user()
 def delete_password(service):
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
     
     # Get the password ID from the form and find it in the database
     password_id = request.form['pw_id']
     password_entry = Password.query.filter_by(id=password_id).first()
-    current_user = User.query.filter_by(id=session['user_id']).first()
+    current_user = g.authenticated_user
 
     # Delete the password entry if it exists and belongs to the user
     if password_entry and password_entry.user_id == current_user.id:
@@ -562,19 +509,13 @@ def delete_password(service):
     return redirect(url_for('dashboard_route'))
 
 
+@require_web_user('admin', error='You are not authorized to view the audit log.')
 def audit_log_viewer():
-    if 'user_id' not in session:
-        return redirect(url_for('index_route'))
     
     # Get current user and their role for authorization
-    current_user = User.query.filter_by(id=session['user_id']).first()
-    if current_user is None:
-        return redirect(url_for('index_route'))
+    current_user = g.authenticated_user
     current_user_role = current_user.role
 
-    if current_user_role not in ['admin']:
-        log_event(f"User {current_user.username} attempted to view the audit log.", "UNAUTHORIZED_ACTION", current_user.id)
-        return redirect(url_for('dashboard_route', error="You are not authorized to view the audit log."))
     
     log_event(f"User {current_user.username} viewed the audit log.", "AUDIT_LOG_VIEW", current_user.id)
 
@@ -585,17 +526,8 @@ def audit_log_viewer():
     return render_template('audit_log.html', audit_logs=audit_logs, current_user_role=current_user_role, default_start_date=default_start_date.strftime('%Y-%m-%d'))
 
 
+@require_web_user('admin', json_response=True)
 def get_audit_logs():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-
-    # Resolve the current database role; session roles can be stale.
-    current_user = User.query.filter_by(id=session['user_id']).first()
-    if current_user is None:
-        return jsonify({'error': 'Authentication required'}), 401
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
-
     # Get the start and end dates from the request
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')

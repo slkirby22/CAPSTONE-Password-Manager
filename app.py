@@ -15,6 +15,7 @@ from flask_bootstrap import Bootstrap
 from flask_cors import CORS
 from dotenv import load_dotenv
 from config import load_config
+from authorization import register_jwt_current_user
 
 
 # Initialize Flask app, extensions, and configuration
@@ -39,6 +40,7 @@ cors = CORS(app,
 )
 
 jwt = JWTManager(app)
+register_jwt_current_user(jwt)
 
 db.init_app(app)
 
