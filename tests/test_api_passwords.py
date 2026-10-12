@@ -1,109 +1,177 @@
-import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+"""Retired vault contracts against shipped routes, with no decrypt or writes."""
+import sys
+from datetime import timedelta
+from pathlib import Path
+from uuid import uuid4
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import jwt
 import pytest
-from flask import Flask
 from cryptography.fernet import Fernet
+from flask_jwt_extended import create_access_token
+from sqlalchemy import event
 
-from models import db, User, Password, audit_log
-from api_functions import add_password_api, update_password_api, delete_password_api, get_dashboard_data, pwd_context
+from api_functions import retired_vault_api
+from app import app, limiter
+from models import Password, User, db
 
-
-def create_test_app():
-    app = Flask(__name__)
-    app.config.update({
-        'TESTING': True,
-        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
-        'ENCRYPTION_KEY': Fernet.generate_key(),
-    })
-    db.init_app(app)
-    return app
+RETIRED = {
+    'error': 'vault_api_retired',
+    'message': ('Vault API retired. Use the web interface; this version does not '
+                'support the historical mobile client.'),
+}
+ENDPOINTS = [
+    ('GET', '/api/dashboard'),
+    ('POST', '/api/passwords'),
+    ('PATCH', '/api/passwords/1'),
+    ('DELETE', '/api/passwords/1'),
+]
 
 
 @pytest.fixture
-def app_ctx():
-    app = create_test_app()
+def vault_client(monkeypatch):
+    monkeypatch.setitem(app.config, 'TESTING', True)
+    # Leave CSRF enabled: shipped API exemptions, not test bypasses, must work.
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
+    monkeypatch.setattr(limiter, 'enabled', False)
     with app.app_context():
+        assert db.engine.url.get_backend_name() == 'sqlite'
+        assert db.engine.url.database == ':memory:'
         db.create_all()
-        user = User(username='TESTUSER', password=pwd_context.hash('secret'), role='employee')
-        db.session.add(user)
+        users = [User(name, 'unused synthetic hash', role) for name, role in [
+            ('OWNER', 'employee'), ('SHARED', 'employee'),
+            ('OUTSIDER', 'employee'), ('ADMIN', 'admin')]]
+        db.session.add_all(users)
+        db.session.flush()
+        db.session.add(Password('synthetic service', 'synthetic username',
+                               Fernet(app.config['ENCRYPTION_KEY']).encrypt(b'synthetic vault secret'),
+                               'synthetic notes', users[0].id, [users[1]]))
         db.session.commit()
-        yield app
+    try:
+        yield app.test_client()
+    finally:
+        with app.app_context():
+            db.session.remove()
+            db.drop_all()
 
 
-def test_add_password_logs_event(app_ctx):
-    user = User.query.filter_by(username='TESTUSER').first()
-    result = add_password_api(user.id, {
-        'service_name': 'email',
-        'username': 'me',
-        'password': 'pw'
-    })
-    assert result['message'] == 'Password added successfully'
-    log = audit_log.query.filter_by(event_type='API_PASSWORD_ADD').first()
-    assert log is not None
-    assert log.user_id == user.id
+def token_for(username='OWNER', **kwargs):
+    with app.app_context():
+        user = User.query.filter_by(username=username).one()
+        return create_access_token(identity=str(user.id),
+                                   additional_claims={'auth_identity': user.auth_identity}, **kwargs)
 
 
-def test_update_password_logs_event(app_ctx):
-    user = User.query.filter_by(username='TESTUSER').first()
-    add_res = add_password_api(user.id, {
-        'service_name': 'email',
-        'username': 'me',
-        'password': 'pw'
-    })
-    password_id = add_res['password_id']
-    result = update_password_api(user.id, password_id, {'password': 'new'})
-    assert result['message'] == 'Password updated successfully'
-    log = audit_log.query.filter_by(event_type='API_PASSWORD_UPDATE').first()
-    assert log is not None
-    assert log.user_id == user.id
+def snapshot():
+    with app.app_context():
+        return {table.name: [tuple(row) for row in db.session.execute(table.select()).all()]
+                for table in db.metadata.sorted_tables}
 
 
-def test_delete_password_logs_event(app_ctx):
-    user = User.query.filter_by(username='TESTUSER').first()
-    add_res = add_password_api(user.id, {
-        'service_name': 'email',
-        'username': 'me',
-        'password': 'pw'
-    })
-    password_id = add_res['password_id']
-    result = delete_password_api(user.id, password_id)
-    assert result['message'] == 'Password deleted successfully'
-    log = audit_log.query.filter_by(event_type='API_PASSWORD_DELETE').first()
-    assert log is not None
-    assert log.user_id == user.id
+def assert_read_only_response(client, monkeypatch, method, path, token=None, expected=410,
+                              body='{"password":"attempted replacement"}'):
+    before = snapshot()
+    def forbidden_decrypt(*args, **kwargs):
+        pytest.fail('Retired API must never decrypt a vault secret')
+    monkeypatch.setattr(Fernet, 'decrypt', forbidden_decrypt)
+    def forbid_writes(connection, cursor, statement, parameters, context, executemany):
+        assert statement.lstrip().split()[0].upper() not in {'INSERT', 'UPDATE', 'DELETE'}, statement
+    with app.app_context():
+        engine = db.engine
+    event.listen(engine, 'before_cursor_execute', forbid_writes)
+    try:
+        response = client.open(path, method=method,
+                               headers={'Authorization': f'Bearer {token}'} if token else {},
+                               data=body, content_type='application/json')
+    finally:
+        event.remove(engine, 'before_cursor_execute', forbid_writes)
+    assert response.status_code == expected
+    assert response.is_json
+    if expected == 410:
+        assert response.get_json() == RETIRED
+    else:
+        assert response.get_json().get('error') != RETIRED['error']
+    assert b'synthetic vault secret' not in response.data
+    assert b'synthetic notes' not in response.data
+    assert snapshot() == before
+    return response
 
 
-def test_shared_password_visible_via_api(app_ctx):
-    owner = User.query.filter_by(username='TESTUSER').first()
-    other = User(username='OTHER', password=pwd_context.hash('pw'), role='employee')
-    db.session.add(other)
-    db.session.commit()
-    res = add_password_api(owner.id, {
-        'service_name': 'shared',
-        'username': 'me',
-        'password': 'pw',
-        'shared_with': [other.id]
-    })
-    assert 'password_id' in res
-
-    data = get_dashboard_data(other.id)
-    assert len(data['passwords']) == 1
-    assert data['passwords'][0]['service_name'] == 'shared'
+def test_retirement_helper_is_context_free():
+    assert retired_vault_api() == (RETIRED, 410)
 
 
-def test_shared_user_cannot_update(app_ctx):
-    owner = User.query.filter_by(username='TESTUSER').first()
-    other = User(username='OTHER2', password=pwd_context.hash('pw'), role='employee')
-    db.session.add(other)
-    db.session.commit()
-    res = add_password_api(owner.id, {
-        'service_name': 's2',
-        'username': 'me',
-        'password': 'pw',
-        'shared_with': [other.id]
-    })
-    pid = res['password_id']
-    # Attempt update as shared user
-    result = update_password_api(other.id, pid, {'username': 'x'})
-    assert result['status_code'] == 404
+@pytest.mark.parametrize('method,path', ENDPOINTS)
+@pytest.mark.parametrize('username', ['OWNER', 'SHARED', 'OUTSIDER', 'ADMIN'])
+def test_valid_current_jwt_gets_retirement_without_data_or_mutation(vault_client, monkeypatch,
+                                                                  method, path, username):
+    assert_read_only_response(vault_client, monkeypatch, method, path, token_for(username))
 
+
+@pytest.mark.parametrize('method,path', ENDPOINTS)
+@pytest.mark.parametrize('kind', ['missing', 'malformed', 'wrong-key', 'expired', 'revoked',
+                                  'legacy', 'stale', 'deleted', 'reused'])
+def test_authentication_still_precedes_retirement(vault_client, monkeypatch, method, path, kind):
+    token = token_for('ADMIN')
+    expected = 401
+    if kind == 'missing':
+        token = None
+    elif kind == 'malformed':
+        token, expected = 'not.a.valid.jwt', 422
+    elif kind == 'wrong-key':
+        token = jwt.encode({'sub': '4'}, 'synthetic-wrong-key-000000000000000000', algorithm='HS256')
+        expected = 422
+    elif kind == 'expired':
+        token = token_for('ADMIN', expires_delta=timedelta(seconds=-1))
+    elif kind == 'revoked':
+        response = vault_client.post('/api/logout', headers={'Authorization': f'Bearer {token}'})
+        assert response.status_code == 200
+    elif kind == 'legacy':
+        with app.app_context():
+            token = create_access_token(identity='4')
+    elif kind == 'stale':
+        with app.app_context():
+            User.query.filter_by(username='ADMIN').one().auth_identity = uuid4().hex
+            db.session.commit()
+    elif kind in ('deleted', 'reused'):
+        with app.app_context():
+            old = User.query.filter_by(username='ADMIN').one()
+            old_id = old.id
+            db.session.delete(old)
+            db.session.commit()
+            if kind == 'reused':
+                replacement = User('REPLACEMENT', 'unused synthetic hash', 'admin')
+                db.session.add(replacement)
+                db.session.commit()
+                assert replacement.id == old_id, 'Exercise actual SQLite ID reuse'
+    assert_read_only_response(vault_client, monkeypatch, method, path, token, expected)
+
+
+@pytest.mark.parametrize('method,path', ENDPOINTS)
+def test_web_cookie_never_authorizes_retired_api(vault_client, monkeypatch, method, path):
+    with app.app_context():
+        user = User.query.filter_by(username='OWNER').one()
+        user_id, binding = user.id, user.auth_identity
+    with vault_client.session_transaction() as session:
+        session.update(user_id=user_id, auth_identity=binding, username='OWNER', role='employee')
+    assert_read_only_response(vault_client, monkeypatch, method, path, expected=401)
+
+
+@pytest.mark.parametrize('method,path', ENDPOINTS)
+@pytest.mark.parametrize('body', ['{', 'null', '[]', ''])
+def test_retired_vault_does_not_parse_or_validate_payload(vault_client, monkeypatch, method, path, body):
+    assert_read_only_response(vault_client, monkeypatch, method, path, token_for(), body=body)
+
+
+@pytest.mark.parametrize('method', ['PATCH', 'DELETE'])
+@pytest.mark.parametrize('selector', ['999999999', 'synthetic-service', 'not-a-public-id'])
+def test_retirement_does_not_resolve_item_selector(vault_client, monkeypatch, method, selector):
+    assert_read_only_response(vault_client, monkeypatch, method, f'/api/passwords/{selector}', token_for())
+
+
+def test_no_api_reveal_route_is_added(vault_client, monkeypatch):
+    monkeypatch.setattr(Fernet, 'decrypt', lambda *args: pytest.fail('No API reveal exists'))
+    response = vault_client.post('/api/passwords/1/reveal', headers={
+        'Authorization': f'Bearer {token_for()}'})
+    assert response.status_code == 404

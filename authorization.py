@@ -2,8 +2,8 @@
 from functools import wraps
 import re
 
-from flask import g, jsonify, redirect, request, session, url_for
-from models import User
+from flask import current_app, g, jsonify, redirect, request, session, url_for
+from models import User, db
 from audit_events import log_event
 
 ROLES = frozenset({'admin', 'manager', 'employee'})
@@ -33,7 +33,12 @@ def require_web_user(*roles, json_response=False, search_response=False,
     def decorate(view):
         @wraps(view)
         def protected(*args, **kwargs):
-            user = current_web_user()
+            try:
+                user = current_web_user()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.error('Account lookup failed.')
+                return jsonify({'error': 'Service unavailable'}), 503
             if user is None:
                 if search_response:
                     return jsonify({'found': False})

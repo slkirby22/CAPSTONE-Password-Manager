@@ -66,6 +66,9 @@ def test_dashboard_displays_passwords(client, monkeypatch):
         return 'rendered'
 
     monkeypatch.setattr('functions.render_template', fake_render)
+    def forbidden_decrypt(*args, **kwargs):
+        raise AssertionError('Dashboard must never decrypt a secret')
+    monkeypatch.setattr(Fernet, 'decrypt', forbidden_decrypt)
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
@@ -76,7 +79,12 @@ def test_dashboard_displays_passwords(client, monkeypatch):
     assert captured['template'] == 'dashboard.html'
     assert len(captured['context']['passwords']) == 1
     assert captured['context']['passwords'][0]['service_name'] == 'email'
-    assert captured['context']['passwords'][0]['password'] == 'secretpw'
+    row = captured['context']['passwords'][0]
+    assert 'password' not in row
+    assert 'id' not in row
+    assert len(row['item_id']) == 32
+    assert 'secretpw' not in repr(captured['context'])
+    assert 'gAAAA' not in repr(captured['context'])
 
 
 def test_dashboard_shows_shared_password(client, monkeypatch):
@@ -89,6 +97,9 @@ def test_dashboard_shows_shared_password(client, monkeypatch):
         return 'rendered'
 
     monkeypatch.setattr('functions.render_template', fake_render)
+    def forbidden_decrypt(*args, **kwargs):
+        raise AssertionError('Dashboard must never decrypt a secret')
+    monkeypatch.setattr(Fernet, 'decrypt', forbidden_decrypt)
     with client.session_transaction() as sess:
         sess['user_id'] = 2
         sess['auth_identity'] = auth_identity_for(client, 2)

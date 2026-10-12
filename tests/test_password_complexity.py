@@ -31,9 +31,9 @@ def create_test_app():
     def add_password_route():
         return add_password()
 
-    @app.route('/update_password/<service>', methods=['POST'])
-    def update_password_route(service):
-        return update_password(service)
+    @app.route('/passwords/<item_id>/update', methods=['POST'])
+    def update_password_route(item_id):
+        return update_password(item_id)
 
     return app
 
@@ -77,12 +77,13 @@ def test_update_password_accepts_weak(client):
     with app.app_context():
         pw = Password.query.filter_by(service_name='email').first()
         pw_id = pw.id
+        item_id = pw.item_id
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
         sess['username'] = 'TESTUSER'
         sess['role'] = 'employee'
-    resp = client.post(f'/update_password/email', data={'pw_id':pw_id,'username':'user','password':'123','notes':''})
+    resp = client.post(f'/passwords/{item_id}/update', data={'replace_password':'1','username':'user','password':'123','notes':''})
     assert resp.status_code == 302
     with app.app_context():
         pw = Password.query.get(pw_id)

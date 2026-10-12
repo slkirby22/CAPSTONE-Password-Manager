@@ -190,8 +190,10 @@ assert client.get('/get_audit_logs').status_code == 200
 response = client.post('/api/login', json={'username':'SYNTHETIC','password':'Synthetic!99'})
 assert response.status_code == 200
 response = client.get('/api/dashboard', headers={'Authorization': 'Bearer ' + response.json['access_token']})
-assert response.status_code == 200
-assert response.json['passwords'][0]['password'] == 'synthetic migrated vault'
+assert response.status_code == 410
+assert response.json['error'] == 'vault_api_retired'
+with app.app_context():
+    assert Fernet(app.config['ENCRYPTION_KEY']).decrypt(Password.query.one().password) == b'synthetic migrated vault'
 '''
     environment = dict(os.environ, DATABASE_URL=f'sqlite:///{database}', PYTHON_DOTENV_DISABLED='1')
     subprocess.run([sys.executable, '-c', code], env=environment,

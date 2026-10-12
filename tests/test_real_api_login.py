@@ -97,8 +97,8 @@ def test_real_login_preserves_success_contract_and_resets_counter(real_client):
 
     dashboard = real_client.get('/api/dashboard', headers={
         'Authorization': f"Bearer {data['access_token']}"})
-    assert dashboard.status_code == 200
-    assert dashboard.get_json()['user']['id'] == user_id
+    assert dashboard.status_code == 410
+    assert dashboard.get_json()['error'] == 'vault_api_retired'
     with real_client.session_transaction() as session:
         assert 'user_id' not in session
 

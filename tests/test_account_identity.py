@@ -47,7 +47,7 @@ def test_deleted_account_credentials_never_become_replacement_account(clients):
     old_headers = login(old, 'OLD')
     with old.session_transaction() as session:
         old_session = dict(session)
-    assert old.get('/api/dashboard', headers=old_headers).status_code == 200
+    assert old.get('/api/dashboard', headers=old_headers).status_code == 410
     assert admin.post('/delete_user/2').status_code == 302
     assert old.get('/api/dashboard', headers=old_headers).status_code == 401
     assert admin.post('/create_user', data={
@@ -67,7 +67,7 @@ def test_deleted_account_credentials_never_become_replacement_account(clients):
     with old.session_transaction() as session:
         assert 'user_id' not in session
     replacement_headers = login(old, 'NEW')
-    assert old.get('/api/dashboard', headers=replacement_headers).status_code == 200
+    assert old.get('/api/dashboard', headers=replacement_headers).status_code == 410
     assert old.get('/get_audit_logs').status_code == 200
 
 
@@ -108,8 +108,8 @@ def test_login_binds_both_transports_and_current_role_remains_authoritative(clie
         assert session['auth_identity'] == identity
     assert client.get('/get_audit_logs').status_code == 403
     response = client.get('/api/dashboard', headers=headers)
-    assert response.status_code == 200
-    assert response.json['user']['role'] == 'employee'
+    assert response.status_code == 410
+    assert response.json['error'] == 'vault_api_retired'
     assert client.get('/logout').status_code == 302
     with client.session_transaction() as session:
         assert 'auth_identity' not in session

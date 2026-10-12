@@ -2,6 +2,9 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pytz
 from uuid import uuid4
+from sqlalchemy import CheckConstraint, DDL, event
+from sqlalchemy.orm.attributes import NO_VALUE
+from item_identity import ITEM_ID_CHECK, ITEM_TRIGGERS, is_item_id
 
 est = pytz.timezone('US/Eastern')
 
@@ -31,6 +34,9 @@ class User(db.Model):
         self.role = role
     
 class Password(db.Model):
+    __table_args__ = (CheckConstraint(ITEM_ID_CHECK, name='ck_password_item_identity'),)
+    item_id = db.Column(db.String(32), unique=True, nullable=False,
+                        default=lambda: uuid4().hex)
     id = db.Column(db.Integer, primary_key=True)
     service_name = db.Column(db.String(255), nullable=False)
     username = db.Column(db.String(255), nullable=False)
@@ -43,6 +49,7 @@ class Password(db.Model):
                                    backref=db.backref('shared_passwords', lazy='dynamic'))
 
     def __init__(self, service_name, username, password, notes, user_id, shared_users=None):
+        self.item_id = uuid4().hex
         self.service_name = service_name
         self.username = username
         self.password = password
@@ -75,3 +82,18 @@ class TokenBlacklist(db.Model):
 
     def __repr__(self):
         return f'<BlacklistedToken {self.jti}>'
+
+
+@event.listens_for(Password.item_id, 'set', retval=True, active_history=True)
+def _immutable_item_id(target, value, oldvalue, initiator):
+    if not is_item_id(value):
+        raise ValueError('Invalid item identity')
+    if oldvalue is not NO_VALUE and oldvalue != value:
+        raise ValueError('Immutable item identity')
+    return value
+
+
+# Direct SQL/bulk ORM updates are guarded too; create_all never upgrades old tables.
+for _trigger_sql in ITEM_TRIGGERS.values():
+    event.listen(Password.__table__, 'after_create',
+                 DDL(_trigger_sql).execute_if(dialect='sqlite'))

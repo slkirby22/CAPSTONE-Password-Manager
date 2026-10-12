@@ -1,14 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    const togglePasswordButtons = document.querySelectorAll('[id^="toggle-password-"]');
-
-    togglePasswordButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const passwordId = button.id.replace('toggle-password-', '');
-            togglePasswordList(passwordId);
-        });
-    });
-
     const passwordToggleButton = document.getElementById('password-toggle');
     if (passwordToggleButton) {
         passwordToggleButton.addEventListener('click', togglePassword);
@@ -45,18 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function togglePassword() {
     var passwordField = document.getElementById("password");
     var passwordToggle = document.getElementById("password-toggle");
-    if (passwordField.type === "password") {
-        passwordField.type = "text";
-        passwordToggle.innerHTML = "Hide Password";
-    } else {
-        passwordField.type = "password";
-        passwordToggle.innerHTML = "Show Password";
-    }
-}
-
-function togglePasswordList(passwordid) {
-    var passwordField = document.getElementById("password" + passwordid);
-    var passwordToggle = document.getElementById("toggle-password-" + passwordid);
     if (passwordField.type === "password") {
         passwordField.type = "text";
         passwordToggle.innerHTML = "Hide Password";
@@ -153,11 +132,11 @@ function setupUserSearch(prefix) {
         fetch(`/search_user?username=${encodeURIComponent(username)}`)
             .then(resp => resp.json())
             .then(data => {
-                if (data.found) {
+                if (data.found && /^[0-9a-f]{32}$/.test(data.auth_identity)) {
                     resultDiv.textContent = 'User found';
-                    if (!list.querySelector(`li[data-id="${data.id}"]`)) {
+                    if (!list.querySelector(`li[data-id="${data.auth_identity}"]`)) {
                         const li = document.createElement('li');
-                        li.dataset.id = data.id;
+                        li.dataset.id = data.auth_identity;
                         li.className = 'list-group-item d-flex justify-content-between align-items-center';
                         li.textContent = data.username;
                         const removeBtn = document.createElement('button');
@@ -168,7 +147,7 @@ function setupUserSearch(prefix) {
                         const hidden = document.createElement('input');
                         hidden.type = 'hidden';
                         hidden.name = 'shared_users';
-                        hidden.value = data.id;
+                        hidden.value = data.auth_identity;
                         li.appendChild(removeBtn);
                         li.appendChild(hidden);
                         list.appendChild(li);
