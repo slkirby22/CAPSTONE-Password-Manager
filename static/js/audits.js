@@ -39,7 +39,7 @@ function fetchAndUpdateLogs() {
     
     // Show loading state
     const tbody = document.querySelector('#audit-logs-table tbody');
-    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+    showAuditStatus(tbody, 'Loading...');
     
     fetch(`/get_audit_logs?start_date=${startDate}&end_date=${endDate}`)
         .then(response => {
@@ -53,23 +53,36 @@ function fetchAndUpdateLogs() {
         })
         .catch(error => {
             console.error('Error fetching logs:', error);
-            tbody.innerHTML = '<tr><td colspan="5">Error loading data</td></tr>';
+            showAuditStatus(tbody, 'Error loading data');
         });
+}
+
+function showAuditStatus(tbody, message) {
+    tbody.textContent = '';
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.textContent = message;
+    row.appendChild(cell);
+    tbody.appendChild(row);
 }
 
 function updateTable(logs) {
     const tbody = document.querySelector('#audit-logs-table tbody');
-    tbody.innerHTML = ''; // Clear existing rows
+    tbody.textContent = ''; // Clear existing rows
 
     logs.forEach(log => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${log.id}</td>
-            <td>${log.event_time}</td>
-            <td>${log.event_message}</td>
-            <td class="event-type">${log.event_type}</td>
-            <td>${log.user_id}</td>
-        `;
+        const fields = ['id', 'event_time', 'event_message', 'event_type', 'user_id'];
+        fields.forEach(field => {
+            const cell = document.createElement('td');
+            // Audit values are untrusted text, never HTML.
+            cell.textContent = String(log[field]);
+            if (field === 'event_type') {
+                cell.className = 'event-type';
+            }
+            row.appendChild(cell);
+        });
         tbody.appendChild(row);
     });
 }
