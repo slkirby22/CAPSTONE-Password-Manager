@@ -8,6 +8,9 @@ CI and isolated Render test-hosting preparation are documented in
 [the test deployment guide](Documentation/render-testing.md). Deployment remains
 blocked pending its launch gates. Nothing deploys automatically from this setup.
 
+The isolated [runtime dependency remediation](Documentation/dependency-remediation.md)
+documents upgrade compatibility checks and the remaining security gates.
+
 ## Test locally
 
 Python 3.12 and Node 22 are required for the prepared CI path:
