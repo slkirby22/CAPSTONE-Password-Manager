@@ -3,11 +3,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
 from flask import Flask
 
-secret_path = os.path.join(os.path.dirname(__file__), '..', 'secret.key')
-if not os.path.exists(secret_path):
-    with open(secret_path, 'wb') as f:
-        f.write(b'testkey')
-
 from app import apply_csp, apply_security_headers
 
 

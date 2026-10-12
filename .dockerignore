@@ -1,0 +1,11 @@
+.git
+.env*
+*.key
+*.db
+*.sqlite*
+__pycache__
+.pytest_cache
+.venv
+venv
+SQL
+Documentation

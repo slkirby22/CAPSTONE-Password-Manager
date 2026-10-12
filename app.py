@@ -14,11 +14,13 @@ from flask_jwt_extended import jwt_required, current_user, get_jwt_identity, JWT
 from flask_bootstrap import Bootstrap
 from flask_cors import CORS
 from dotenv import load_dotenv
+from config import load_config
 
 
 # Initialize Flask app, extensions, and configuration
 load_dotenv()
 app = Flask(__name__)
+app.config.update(load_config())
 Bootstrap(app)
 csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address)
@@ -36,41 +38,6 @@ cors = CORS(app,
     }
 )
 
-def load_key():
-    try:
-        return open("secret.key", "rb").read()
-    except FileNotFoundError:
-        print("Encryption key file not found.")
-        log_event("Encryption key file not found.", "error", 0)
-        raise
-
-# Configure database connection from environment variables
-db_user = os.environ.get('DB_USER', 'root')
-db_password = os.environ.get('DB_PASSWORD', 'root')
-db_host = os.environ.get('DB_HOST', 'localhost')
-db_name = os.environ.get('DB_NAME', 'password_manager')
-db_type = os.environ.get('DB_TYPE', 'mysql')
-
-if db_type.lower() == 'mssql':
-    app.config['SQLALCHEMY_DATABASE_URI'] = (
-        f"mssql+pyodbc://{db_user}:{db_password}@{db_host}/{db_name}?"
-        "driver=ODBC+Driver+17+for+SQL+Server&"
-        "autocommit=True&"
-        "TrustServerCertificate=yes"
-    )
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = (
-        f"mysql://{db_user}:{db_password}@{db_host}/{db_name}")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.urandom(24)
-app.config['ENCRYPTION_KEY'] = load_key()
-session_timeout = int(os.environ.get('SESSION_TIMEOUT_MINUTES', '15'))
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=session_timeout)
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-256-bit-secret')
-app.config['JWT_TOKEN_LOCATION'] = ['headers']  # Look for JWT in headers
-
 jwt = JWTManager(app)
 
 db.init_app(app)
@@ -78,10 +45,12 @@ db.init_app(app)
 # Monolithic Web App Routes
 @app.before_request
 def ensure_db_exists():
+    if request.routing_exception is not None or request.endpoint == 'healthz':
+        return
     try:
         User.query.limit(1).first()
     except Exception as e:
-        print(f"Error connecting to the database {e}")
+        app.logger.error("Database readiness check failed")
         raise
 
 @app.after_request
@@ -104,6 +73,18 @@ def apply_security_headers(response):
     response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains'
     response.headers['Session-Cookie-SameSite'] = 'Lax'
     return response
+
+
+@app.route('/healthz')
+def healthz():
+    # Validate mapped tables/columns without fetching rows or exposing errors.
+    try:
+        for table in db.metadata.sorted_tables:
+            db.session.execute(table.select().limit(0))
+    except Exception:
+        db.session.rollback()
+        return jsonify({'status': 'unavailable'}), 503
+    return jsonify({'status': 'ok'}), 200
 
 
 # Routes for Web App
@@ -275,4 +256,4 @@ def api_delete_password(password_id):
     return jsonify(result), result.get("status_code", 200)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
