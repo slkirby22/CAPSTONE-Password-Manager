@@ -1,99 +1,40 @@
-# CAPSTONE-Password-Manager
-**Enterprise password manager for CIST 1451 CAPTSTONE class**
+# CAPSTONE Password Manager: legacy prototype
 
-This is a password manager that implements user roles and audit logging alongside typical password manager functionality.
+**Synthetic test data only. This is not production-ready and is not zero knowledge.**
+The server holds the vault decryption key and returns plaintext to clients.
+Do not store real passwords or import a real vault.
 
-## Features
+CI and isolated Render test-hosting preparation are documented in
+[the test deployment guide](Documentation/render-testing.md). Deployment remains
+blocked pending its launch gates. Nothing deploys automatically from this setup.
 
-- **Secure Password Storage:** Store and manage passwords securely using encryption.
-- **User Authentication:** Ensure only authorized users can access the system.
-- **Cross-Platform Support:** Accessible via web browsers and a mobile app (not included in this repo).
-- **Customizable Interface:** Ability to customize and change the UI as needed.
+## Test locally
 
-## Technologies Used
+Python 3.12 and Node 22 are required for the prepared CI path:
 
-The project is built using the following technologies:
-
-- **Python and Flask**: Backend logic and application functionality.
-- **HTML**: Structuring the web interface.
-- **JavaScript**: Enhancing interactivity on the front-end.
-- **T-SQL**: Database management and query execution.
-- **CSS and Bootstrap**: Styling the web pages.
-
-## Setup and Installation
-
-### To run the CAPSTONE Password Manager locally, follow these steps:
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/slkirby22/CAPSTONE-Password-Manager.git
-   cd CAPSTONE-Password-Manager
-
-2. **Create and Activate a Virtual Environment:**
-    ```bash
-    python -m venv venv
-    ./venv/Scripts/activate
-
-3. **Install Dependencies:**
-Ensure you have Python installed. Then, install the required Python packages:
-    ```bash
-    pip install -r requirements.txt
-
-4. **Generate the Encryption Key:**
-Run the following command to create `secret.key`:
-    ```bash
-    python keygen.py
-    ```
-5. **Configure the Database:**
-Set up the database using the provided SQL scripts or configuration files.
-
-6. **Environment Variables**
-Create a `.env` file in the project root or set the variables manually. The application uses [python-dotenv](https://pypi.org/project/python-dotenv/) to load these values at startup. Example variables and their defaults are shown below:
-
-| Variable | Default |
-| --- | --- |
-| `DB_USER` | `root` |
-| `DB_PASSWORD` | `root` |
-| `DB_HOST` | `localhost` |
-| `DB_NAME` | `password_manager` |
-| `DB_TYPE` | `mysql` |
-| `JWT_SECRET_KEY` | `your-256-bit-secret` |
-| `SESSION_TIMEOUT_MINUTES` | `15` |
-
-7. **Run the Application:**
-Start the application locally:
-    ```bash
-    python app.py
-
-8. **Access the Application:**
-Open your web browser and navigate to:
-http://localhost:5000
-
-
-### To run the Password Manager in production, it recommended that...
-1. You use a production WSGI server instead of the built-in Flask development server.
-2. You change database user password and username.
-3. You delete the default admin user after initialization or change it's username and password.
-4. You use HTTPS and edit configuration variables accordingly.
-5. Store sensitive information, such as secret keys and database credentials, in environment variables instead of hardcoding them.
-6. Monitor the application for unusual activity or performance issues.
-7. Limit access to necessary files, directories, and database permissions to minimize security risks.
-8. Schedule regular backups of your database and application files to prevent data loss.
-9. Protect the server by configuring a firewall and applying security rules to restrict unwanted traffic.
-10. Regularly update your Python packages and dependencies to patch security vulnerabilities.
-## Development
-
-Run the test suite with:
-```bash
-pytest
+```sh
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements/test.txt
+python -m pytest -q
+python scripts/smoke_wsgi.py
 ```
 
-Example output:
-```
-3 passed in 0.59s
-```
+## Configuration
 
+Use `.env.example` as a placeholder-only reference; real keys belong outside
+version control. Explicit stable `SECRET_KEY`, `JWT_SECRET_KEY`, and valid
+`ENCRYPTION_KEY` values are required. Database credentials have no defaults.
+See the deployment guide for the supported modes and legacy database setup.
+`python app.py` never enables debug mode. Interactive local use still requires
+HTTPS because session cookies are Secure.
 
+## Original project
 
-## Contact
-For questions or feedback, please contact the repository owner @slkirby22.
+A Flask/SQLAlchemy password-manager capstone for CIST 1451, with web and REST
+interfaces, roles, sharing, audit logging and Fernet-encrypted password fields.
+MySQL and SQL Server scripts are historical artifacts, not safe hosting/bootstrap
+instructions; they contain known sample credentials. Do not run them in a hosted
+instance. The mobile app is separate from this repository.
+
+License: [Apache 2.0](LICENSE). Contact: @slkirby22.

@@ -170,3 +170,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local synthetic databases and environment variants
+*.db
+*.sqlite
+*.sqlite3
+.env.*
+!.env.example

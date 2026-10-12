@@ -1,0 +1,32 @@
+# PREPARATION ONLY. Do not connect this Blueprint before launch/security review.
+# Creating a Blueprint provisions/deploys resources even with autoDeployTrigger off.
+services:
+  - type: web
+    name: oldcapstone-synthetic
+    runtime: docker
+    plan: free
+    repo: https://github.com/slkirby22/CAPSTONE-Password-Manager
+    branch: main
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: 'off'
+    healthCheckPath: /healthz
+    numInstances: 1
+    envVars:
+      - key: APP_ENV
+        value: synthetic
+      - key: SYNTHETIC_DATA_ONLY
+        value: 'true'
+      - key: DATABASE_URL
+        value: sqlite:////data/synthetic.db
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: TRUSTED_HOSTS
+        sync: false
+      - key: SESSION_TIMEOUT_MINUTES
+        value: '15'
+# No disk, custom domain, Postgres, deploy hooks, or generated credentials.
+# Data is disposable and lost on restart/redeploy/idle spin-down.
