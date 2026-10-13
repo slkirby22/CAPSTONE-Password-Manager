@@ -2,6 +2,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 const {chromium} = require('playwright');
 const base = process.env.BROWSER_SMOKE_BASE;
 const fixture = JSON.parse(process.env.BROWSER_SMOKE_FIXTURE);
@@ -93,6 +95,28 @@ function ciphertext() {
         await page.evaluate(() => window.__held.shift()());
         await page.waitForTimeout(75);
     }
+    const screenshotDir = process.env.BROWSER_SMOKE_SCREENSHOTS;
+    const layoutReports = [];
+    async function capture(target, name) {
+        if (!screenshotDir) return;
+        fs.mkdirSync(screenshotDir, {recursive: true});
+        const previous = target.viewportSize();
+        for (const [size, viewport] of Object.entries({desktop: {width: 1440, height: 1000}, mobile: {width: 390, height: 844}})) {
+            await target.setViewportSize(viewport);
+            await target.evaluate(() => document.fonts.ready);
+            await target.screenshot({path: path.join(screenshotDir, `${name}-${size}.png`), fullPage: true});
+            layoutReports.push(await target.evaluate(({name, size}) => ({name, size,
+                viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+                viewportMeta: document.querySelector('meta[name="viewport"]')?.content || null,
+                controls: [...document.querySelectorAll('button,input:not([type="hidden"]),select,a.btn')].filter(el => el.getClientRects().length).map(el => {
+                    const r = el.getBoundingClientRect();
+                    return {label: el.textContent.trim() || el.getAttribute('aria-label') || el.id || el.name,
+                        x: r.x, y: r.y, width: r.width, height: r.height};
+                })}), {name, size}));
+        }
+        await target.setViewportSize(previous);
+        fs.writeFileSync(path.join(screenshotDir, 'layout-report.json'), JSON.stringify(layoutReports, null, 2));
+    }
     try {
         await page.goto(`${base}/`);
         // Dispatch deterministically while the document is alive: a real unload
@@ -115,7 +139,10 @@ function ciphertext() {
         });
         assert.equal(unloadLogouts, 0, 'Landing-page unload must not issue a background logout');
         console.log('PASS landing-page unload does not issue a session-clearing request');
+        await page.goto(`${base}/login`);
+        await capture(page, 'login');
         await login('BROWSEROWNER');
+        await capture(page, 'vault');
         assert.equal(logoutCount, 0, 'Landing-to-login navigation must not issue logout');
         const metadata = await page.content();
         assert(!metadata.includes(firstSecret) && !metadata.includes(secondSecret));
@@ -128,6 +155,7 @@ function ciphertext() {
         await page.locator('#hide-password').click();
         await hidden();
         await select(fixture.first);
+        await capture(page, 'owner-share');
         await reveal(firstSecret);
         await page.locator('#hide-password').click();
         await hidden();
@@ -250,6 +278,7 @@ function ciphertext() {
             assert.equal(await adminPage.locator('#audit-logs-table tbody tr:visible').count(), 0);
             await adminPage.locator('#clear-filters').click();
             await adminPage.goto(`${base}/view_users`);
+            await capture(adminPage, 'admin-users');
             const resetCsrf = await adminPage.locator('[name=csrf_token]').first().inputValue();
             const resetStatus = await adminPage.evaluate(async ({id, csrf}) => (await fetch(`/update_user/${id}`, {
                 method: 'POST', body: new URLSearchParams({csrf_token: csrf,
