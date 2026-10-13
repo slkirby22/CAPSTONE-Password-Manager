@@ -57,6 +57,21 @@ def test_real_responses_enforce_csp():
 
 
 def test_existing_vendor_assets_match_reviewed_manifest():
-    manifest = json.loads((ROOT / 'static/bootstrap/asset-manifest.json').read_text())
+    manifest = json.loads((ROOT / 'static/vendor/bootstrap-5.3.5/asset-manifest.json').read_text())
     for name, expected in manifest['sha256'].items():
-        assert sha256((ROOT / 'static/bootstrap' / name).read_bytes()).hexdigest() == expected
+        assert sha256((ROOT / 'static/vendor/bootstrap-5.3.5' / name).read_bytes()).hexdigest() == expected
+
+
+def test_real_vendor_urls_serve_reviewed_bytes_not_extension_assets():
+    from models import db
+    with app.app_context():
+        db.create_all()
+        try:
+            for name in ('js/bootstrap.min.js', 'css/bootstrap.min.css'):
+                response = app.test_client().get('/static/vendor/bootstrap-5.3.5/' + name)
+                assert response.status_code == 200
+                assert response.data == (ROOT / 'static/vendor/bootstrap-5.3.5' / name).read_bytes()
+                assert b'5.3.5' in response.data[:250]
+        finally:
+            db.session.remove()
+            db.drop_all()
