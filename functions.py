@@ -8,6 +8,7 @@ import pytz
 from audit_events import log_event
 from diagnostics import report_failure, rollback_safely
 from authorization import current_web_user, require_web_user, USER_MANAGERS, can_manage_user, can_assign_role, authentication_claims
+from account_input import account_fields
 from vault_access import item_metadata, resolve_item, resolve_recipients, valid_item_id
 
 pwd_context = CryptContext(schemes=["scrypt"], scrypt__default_rounds=14)
@@ -162,8 +163,10 @@ def create_user():
 
     
     if request.method == 'POST':
-        username = request.form['username'].upper()
-        password = request.form['password']
+        username, password, field_error = account_fields(request.form)
+        if field_error:
+            return render_template('create_user.html', error=field_error,
+                                   current_user_role=current_user_role), 400
         role = request.form['role']
 
         if not can_assign_role(current_user, role):
@@ -262,12 +265,18 @@ def update_user(user_id):
                   'UNAUTHORIZED_ACTION', current_user.id)
         return redirect(url_for('view_users_route', error="Invalid role assignment."))
 
-    new_username = request.form['username'].upper()
+    new_username, submitted_password, field_error = account_fields(
+        request.form, allow_empty_password=True)
+    if field_error:
+        return render_template('view_users.html', error=field_error,
+                               users=User.query.all(), selected_user=db_user,
+                               erroronuser=db_user.username,
+                               current_user_role=current_user_role), 400
 
     # Handle password update and validation
-    password_changed = bool(request.form['password'])
+    password_changed = bool(submitted_password)
     if password_changed:
-        new_password = request.form['password']
+        new_password = submitted_password
 
         if len(new_password) < 8:
             log_event(f"{current_user.username} attempted to update user {user_id} with an invalid password.", "INVALID_PASSWORD", current_user.id)
