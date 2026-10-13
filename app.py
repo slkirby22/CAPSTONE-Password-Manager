@@ -101,8 +101,11 @@ def ensure_db_exists():
 def apply_csp(response):
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://code.jquery.com https://stackpath.bootstrapcdn.com; "
-        "style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com;"
+        "script-src 'self'; script-src-attr 'none'; "
+        "style-src 'self'; style-src-attr 'none'; "
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+        "form-action 'self';"
     )
     return response
 

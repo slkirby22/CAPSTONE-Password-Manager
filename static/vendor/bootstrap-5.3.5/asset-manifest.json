@@ -1,0 +1,10 @@
+{
+  "package": "Bootstrap",
+  "version": "5.3.5",
+  "source": "Existing repository-vendored assets; upstream https://github.com/twbs/bootstrap/tree/v5.3.5",
+  "license": "MIT (asset headers retained)",
+  "sha256": {
+    "js/bootstrap.min.js": "e16a2ac5f22e9b44bd07ee2a78c598dd0b5cf8c8f45d75853d2095022de31354",
+    "css/bootstrap.min.css": "cf33e1f0d7e5bc422715b552ccb60654c2ce9f48f491fb23abf52535e301458c"
+  }
+}
