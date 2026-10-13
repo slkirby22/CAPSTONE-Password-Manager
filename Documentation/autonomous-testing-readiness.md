@@ -68,8 +68,10 @@ an explicit signing-key/session invalidation policy and secure key handling.
    A personal Render service and skirby.net subdomain are proposals, not configured
    infrastructure. No cost or current provider feature is assumed by this document.
 4. Decide disposable versus retained test data. Current hosted preparation creates
-   empty tables and no default administrator. Secure initial administrator setup,
-   access controls and an obvious synthetic-data notice remain launch gates.
+   empty tables and no default administrator. An owner-operated offline synthetic bootstrap command is now prepared; see
+   `synthetic-administrator-bootstrap.md`. It has not created a real account.
+   Approved credential setup, access controls and an obvious synthetic-data notice
+   remain launch gates.
 5. Set deliberate required CI/review checks and deployment permissions. Automated
    testing does not itself authorize automatic merges or public deployment.
 6. Remaining product decisions include manual locks, logout revocation, failed-login
