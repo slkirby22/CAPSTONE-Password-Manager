@@ -54,7 +54,7 @@
 }
 /* Keep long shared usernames and controls inside the existing card on phones. */
 #share-list-update .list-group-item,
-#share-list .list-group-item {
+#share-list-add .list-group-item {
     flex-wrap: wrap;
     gap: 8px;
     overflow-wrap: anywhere;
