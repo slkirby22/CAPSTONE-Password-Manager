@@ -11,6 +11,7 @@ COPY static /app/static
 COPY deployment/start.sh /app/deployment/start.sh
 COPY scripts/init_synthetic_db.py scripts/migrate_account_identity.py /app/scripts/
 COPY scripts/upgrade_item_identity.py /app/scripts/
+COPY scripts/bootstrap_synthetic_admin.py /app/scripts/
 USER 10001:10001
 EXPOSE 10000
 CMD ["sh", "deployment/start.sh"]
