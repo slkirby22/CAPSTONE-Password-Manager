@@ -39,7 +39,9 @@ jobs:
         env:
           BROWSER_SMOKE_SCREENSHOTS: ${{ github.workspace }}/artifacts/synthetic-browser
           NODE_PATH: ${{ github.workspace }}/tests/browser/node_modules
-        run: python scripts/smoke_item_browser.py
+        run: |
+          python scripts/smoke_item_browser.py
+          BROWSER_SMOKE_VISUAL_ONLY=1 python scripts/smoke_item_browser.py
       - name: Preserve synthetic browser visual evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

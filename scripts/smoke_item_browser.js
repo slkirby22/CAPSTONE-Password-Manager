@@ -95,7 +95,7 @@ function ciphertext() {
         await page.evaluate(() => window.__held.shift()());
         await page.waitForTimeout(75);
     }
-    const screenshotDir = process.env.BROWSER_SMOKE_SCREENSHOTS;
+    const screenshotDir = process.env.BROWSER_SMOKE_VISUAL_ONLY === '1' ? process.env.BROWSER_SMOKE_SCREENSHOTS : null;
     const layoutReports = [];
     async function capture(target, name) {
         if (!screenshotDir) return;
@@ -132,6 +132,24 @@ function ciphertext() {
         fs.writeFileSync(path.join(screenshotDir, 'layout-report.json'), JSON.stringify(layoutReports, null, 2));
     }
     try {
+        if (process.env.BROWSER_SMOKE_VISUAL_ONLY === '1') {
+            assert(screenshotDir, 'Visual-only run requires an artifact directory');
+            await page.goto(`${base}/login`);
+            await capture(page, 'login');
+            await login('BROWSEROWNER');
+            await capture(page, 'vault');
+            await select(fixture.first);
+            await capture(page, 'owner-share');
+            await page.goto(`${base}/logout`);
+            await login('BROWSERADMIN');
+            await page.goto(`${base}/view_users`);
+            await capture(page, 'admin-users');
+            assert.deepEqual(failures, []);
+            assert.deepEqual(externalRequests, []);
+            assert.deepEqual(policyViolations, []);
+            console.log('PASS isolated synthetic desktop, narrow and mobile visual capture');
+            return;
+        }
         await page.goto(`${base}/`);
         // Dispatch deterministically while the document is alive: a real unload
         // may cancel its fetch before the test sees it, hiding the cookie race.
@@ -153,10 +171,7 @@ function ciphertext() {
         });
         assert.equal(unloadLogouts, 0, 'Landing-page unload must not issue a background logout');
         console.log('PASS landing-page unload does not issue a session-clearing request');
-        await page.goto(`${base}/login`);
-        await capture(page, 'login');
         await login('BROWSEROWNER');
-        await capture(page, 'vault');
         assert.equal(logoutCount, 0, 'Landing-to-login navigation must not issue logout');
         const metadata = await page.content();
         assert(!metadata.includes(firstSecret) && !metadata.includes(secondSecret));
@@ -169,7 +184,6 @@ function ciphertext() {
         await page.locator('#hide-password').click();
         await hidden();
         await select(fixture.first);
-        await capture(page, 'owner-share');
         await reveal(firstSecret);
         await page.locator('#hide-password').click();
         await hidden();
@@ -292,7 +306,6 @@ function ciphertext() {
             assert.equal(await adminPage.locator('#audit-logs-table tbody tr:visible').count(), 0);
             await adminPage.locator('#clear-filters').click();
             await adminPage.goto(`${base}/view_users`);
-            await capture(adminPage, 'admin-users');
             const resetCsrf = await adminPage.locator('[name=csrf_token]').first().inputValue();
             const resetStatus = await adminPage.evaluate(async ({id, csrf}) => (await fetch(`/update_user/${id}`, {
                 method: 'POST', body: new URLSearchParams({csrf_token: csrf,
