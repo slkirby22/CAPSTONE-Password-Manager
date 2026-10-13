@@ -101,7 +101,7 @@ function ciphertext() {
         if (!screenshotDir) return;
         fs.mkdirSync(screenshotDir, {recursive: true});
         const previous = target.viewportSize();
-        for (const [size, viewport] of Object.entries({desktop: {width: 1440, height: 1000}, mobile: {width: 390, height: 844}})) {
+        for (const [size, viewport] of Object.entries({desktop: {width: 1440, height: 1000}, narrow: {width: 390, height: 844}})) {
             await target.setViewportSize(viewport);
             await target.evaluate(() => document.fonts.ready);
             await target.screenshot({path: path.join(screenshotDir, `${name}-${size}.png`), fullPage: true});
@@ -115,6 +115,20 @@ function ciphertext() {
                 })}), {name, size}));
         }
         await target.setViewportSize(previous);
+        const mobileContext = await browser.newContext({viewport: {width: 390, height: 844},
+            isMobile: true, hasTouch: true, deviceScaleFactor: 1,
+            storageState: await target.context().storageState()});
+        await prepareContext(mobileContext);
+        try {
+            const mobile = await mobileContext.newPage();
+            mobile.on('pageerror', error => failures.push(error.message));
+            await mobile.goto(target.url());
+            await mobile.evaluate(() => document.fonts.ready);
+            await mobile.screenshot({path: path.join(screenshotDir, `${name}-mobile.png`), fullPage: true});
+            layoutReports.push(await mobile.evaluate(name => ({name, size: 'mobile-emulated',
+                viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+                viewportMeta: document.querySelector('meta[name="viewport"]')?.content || null}), name));
+        } finally { await mobileContext.close(); }
         fs.writeFileSync(path.join(screenshotDir, 'layout-report.json'), JSON.stringify(layoutReports, null, 2));
     }
     try {
