@@ -2,11 +2,6 @@
     <head>
         <title>Enterprise Password Manager</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-        <script>
-            window.onbeforeunload = function() {
-                fetch('/logout');
-            }
-        </script>
         <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
         <link rel="icon" href="{{ url_for('favicon') }}">
     </head>

@@ -45,7 +45,22 @@ with tempfile.TemporaryDirectory(prefix='capstone-synthetic-') as directory:
             with sqlite3.connect(Path(directory) / 'synthetic.db') as db:
                 assert db.execute('select count(*) from user').fetchone()[0] == 0
                 assert db.execute('select count(*) from password').fetchone()[0] == 0
-            print('WSGI smoke passed: readiness, index, audit denial, empty schema')
+            sentinel = 'PUBLIC_WSGI_SECRET_TOKEN_SOURCE_SENTINEL'
+            request = urllib.request.Request(
+                'http://127.0.0.1:18080/healthz?source=' + sentinel,
+                headers={'Authorization': 'Bearer ' + sentinel,
+                         'Cookie': 'untrusted=' + sentinel,
+                         'User-Agent': sentinel, 'Referer': 'https://example.invalid/' + sentinel})
+            with urllib.request.urlopen(request, timeout=3) as response:
+                assert response.status == 200
+                assert sentinel.encode() not in response.read()
+
         finally:
-            os.killpg(process.pid, signal.SIGTERM)
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
             process.wait(timeout=10)
+        log.seek(0)
+        output = log.read().decode()
+        assert sentinel not in output, 'Request source leaked into server diagnostics'
+        assert 'request_complete status=200 duration=' in output
+        print('WSGI smoke passed: readiness, index, audit denial, empty schema, sanitized access logs')

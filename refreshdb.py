@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app import app
+from diagnostics import report_failure, rollback_safely
 from models import db, User, Password, password_user
 
 # Used to delete all user and password data from the database
@@ -18,6 +19,6 @@ with app.app_context():
         db.session.query(Password).delete()
         db.session.commit()
         print("All user and password data deleted successfully.")
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error deleting user and password data: {e}")
+    except Exception:
+        rollback_safely()
+        report_failure('database_reset_failed')

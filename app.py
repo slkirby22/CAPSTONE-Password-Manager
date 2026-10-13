@@ -18,6 +18,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from config import load_config
 from authorization import register_jwt_current_user
+from diagnostics import report_failure, rollback_safely
+from werkzeug.exceptions import HTTPException, default_exceptions
+from flask_wtf.csrf import CSRFError
 
 
 # Initialize Flask app, extensions, and configuration
@@ -45,6 +48,41 @@ jwt = JWTManager(app)
 register_jwt_current_user(jwt)
 
 db.init_app(app)
+
+
+@app.errorhandler(Exception)
+def handle_request_failure(error):
+    """Catch before Flask logs a traceback (which can include SQL parameters).
+
+    Never interpolate exception text, URL, body, headers, or account/item data.
+    Preserve HTTP status and protocol headers, but use class-level descriptions.
+    """
+    if isinstance(error, HTTPException):
+        response = error.get_response()
+        description = default_exceptions.get(error.code, HTTPException).description
+        # Existing CSRF reasons are fixed library strings, never token values.
+        if isinstance(error, CSRFError):
+            reasons = {'The CSRF token is missing.', 'The CSRF session token is missing.',
+                       'The CSRF token has expired.', 'The CSRF token is invalid.',
+                       'The CSRF tokens do not match.', 'The referrer header is missing.',
+                       'The referrer does not match the host.'}
+            description = error.description if error.description in reasons else 'Invalid CSRF request.'
+        response.set_data(jsonify({'error': description}).get_data())
+        response.content_type = 'application/json'
+        return response
+    rollback_safely()
+    report_failure('request_failed')
+    return jsonify({'error': 'Request could not be completed'}), 500
+
+
+@jwt.invalid_token_loader
+def invalid_token(reason):
+    return jsonify({'msg': 'Invalid token'}), 422
+
+
+@jwt.unauthorized_loader
+def missing_token(reason):
+    return jsonify({'msg': 'Authentication required'}), 401
 
 # Monolithic Web App Routes
 @app.before_request

@@ -30,9 +30,10 @@ log in again on HTTP 401 retain their contract. Clients that mint, persistently
 reuse, or reconstruct tokens without the claim are incompatible and must change.
 No mobile-client execution or compatibility certification is claimed.
 
-This is an account-incarnation boundary, **not full session revocation**. Account
-password reset, manual lock and anonymous failed-login counters still do not revoke
-existing sessions; that broader abuse/recovery policy remains undecided. Deletion
+Account incarnation remains separate from the later
+[password-change revocation binding](password-session-revocation.md). Successful
+password replacements now revoke existing cookies/JWTs without rotating account
+identity. Manual lock and failed-login counters do not revoke existing sessions. Deletion
 is checked at request authorization, not a new serializable transaction guarantee
 for concurrent account deletion and vault mutation. Restoring an old DB backup can
 restore old identities and sessions when the same signing keys remain; such a

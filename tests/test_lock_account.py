@@ -1,4 +1,4 @@
-from auth_helpers import auth_identity_for
+from auth_helpers import auth_identity_for, credential_binding_for
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
@@ -54,6 +54,7 @@ def test_admin_can_lock_account(client, monkeypatch):
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
+        sess['credential_binding'] = credential_binding_for(client, 1)
         sess['username'] = 'ADMIN'
         sess['role'] = 'admin'
     resp = client.post('/lock_account/2')

@@ -8,6 +8,7 @@ from flask import template_rendered
 from sqlalchemy import event
 
 import functions
+from auth_helpers import credential_binding_for
 from app import app, limiter
 from models import Password, User, db
 
@@ -39,6 +40,7 @@ def client(monkeypatch):
     with c.session_transaction() as s:
         s['user_id'] = 1
         s['auth_identity'] = identities[0]
+        s['credential_binding'] = credential_binding_for(c, 1)
     yield c
     with app.app_context():
         db.session.remove()
@@ -102,6 +104,7 @@ def test_list_then_revocation_denies_without_decrypt(client, monkeypatch, change
     with client.session_transaction() as s:
         s['user_id'] = 2
         s['auth_identity'] = client.identities[1]
+        s['credential_binding'] = credential_binding_for(client, 2)
     assert client.get('/dashboard').status_code == 200
     with app.app_context():
         item = Password.query.filter_by(item_id=client.items[0]).one()

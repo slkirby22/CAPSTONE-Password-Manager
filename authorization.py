@@ -1,6 +1,8 @@
 """Current database identity and legacy role policies (not v2 team ownership)."""
 from functools import wraps
 import re
+import hashlib
+import hmac
 
 from flask import current_app, g, jsonify, redirect, request, session, url_for
 from models import User, db
@@ -14,6 +16,36 @@ def valid_auth_identity(value):
     return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value) is not None
 
 
+def credential_binding(user, transport):
+    """Bind authentication to exactly the password hash that was verified.
+
+    This keyed, domain-separated digest is safe to put in signed cookies/JWTs;
+    never expose the stored hash itself. A newly salted password hash changes the
+    binding in the same transaction, with no independent revocation write that
+    could fail or be lost. Account identity stays stable for sharing references.
+    """
+    key_name = {'web': 'SECRET_KEY', 'jwt': 'JWT_SECRET_KEY'}[transport]
+    key = current_app.config[key_name]
+    if isinstance(key, str):
+        key = key.encode('utf-8')
+    message = ('capstone:credential-binding:v1:' + transport + '\0'
+               + user.auth_identity + '\0' + user.password).encode('utf-8')
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def authentication_claims(user, transport):
+    # Capture before password verification and any commit/expiration. Never mint
+    # a binding from a refreshed row after authenticating its previous password.
+    return {'auth_identity': user.auth_identity,
+            'credential_binding': credential_binding(user, transport)}
+
+
+def credentials_match(user, binding, transport):
+    return (user is not None and isinstance(binding, str)
+            and re.fullmatch(r'[0-9a-f]{64}', binding) is not None
+            and hmac.compare_digest(binding, credential_binding(user, transport)))
+
+
 def current_web_user():
     """Bind every cookie to its original account, never a recycled numeric ID."""
     user_id = session.get('user_id')
@@ -22,7 +54,10 @@ def current_web_user():
     if (type(user_id) is int and 0 < user_id <= 2**63 - 1
             and valid_auth_identity(binding)):
         user = User.query.filter_by(id=user_id, auth_identity=binding).first()
-    if user is None and ('user_id' in session or 'auth_identity' in session):
+    if not credentials_match(user, session.get('credential_binding'), 'web'):
+        user = None
+    if user is None and any(key in session for key in
+                            ('user_id', 'auth_identity', 'credential_binding')):
         # Legacy sessions deliberately sign out rather than being upgraded by ID.
         session.clear()
     return user
@@ -96,7 +131,8 @@ def register_jwt_current_user(jwt):
                 or int(identity) > 2**63 - 1
                 or not valid_auth_identity(binding)):
             return None
-        return User.query.filter_by(id=int(identity), auth_identity=binding).first()
+        user = User.query.filter_by(id=int(identity), auth_identity=binding).first()
+        return user if credentials_match(user, payload.get('credential_binding'), 'jwt') else None
 
     @jwt.user_lookup_error_loader
     def unknown_user(header, payload):
