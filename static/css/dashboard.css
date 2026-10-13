@@ -5,6 +5,7 @@
 }
 
 .main-container {
+    width: 100%;
     max-width: 800px;
     margin: 0 auto;
     padding: 20px;
@@ -35,6 +36,7 @@
 
 .form-control-custom {
     width: 200px !important;
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -49,4 +51,11 @@
 .action-row {
     display: flex;
     gap: 15px;
+}
+/* Keep long shared usernames and controls inside the existing card on phones. */
+#share-list-update .list-group-item,
+#share-list .list-group-item {
+    flex-wrap: wrap;
+    gap: 8px;
+    overflow-wrap: anywhere;
 }

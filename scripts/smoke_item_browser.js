@@ -128,6 +128,15 @@ function ciphertext() {
             layoutReports.push(await mobile.evaluate(name => ({name, size: 'mobile-emulated',
                 viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
                 viewportMeta: document.querySelector('meta[name="viewport"]')?.content || null}), name));
+            const geometry = layoutReports[layoutReports.length - 1];
+            assert.equal(geometry.viewport, 390, 'Mobile layout must use the device viewport');
+            assert(geometry.scrollWidth <= 390, 'Mobile page must not overflow horizontally');
+            const overflow = await mobile.locator('.password-form input:not([type=hidden]), .password-form button, .password-form li').evaluateAll(elements => elements.filter(el => {
+                const outer = el.closest('.password-form').getBoundingClientRect();
+                const inner = el.getBoundingClientRect();
+                return el.getClientRects().length && (inner.left < outer.left - 1 || inner.right > outer.right + 1);
+            }).length);
+            assert.equal(overflow, 0, 'Item controls must remain inside their card');
         } finally { await mobileContext.close(); }
         fs.writeFileSync(path.join(screenshotDir, 'layout-report.json'), JSON.stringify(layoutReports, null, 2));
     }

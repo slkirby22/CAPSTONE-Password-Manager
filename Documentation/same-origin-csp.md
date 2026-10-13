@@ -30,3 +30,13 @@ This reduces external executable dependencies and common injection paths. It
 cannot protect against compromised same-origin scripts, server delivery, browser
 extensions or a hostile device. Existing server-side vault decryption remains
 unchanged; this is not a zero-knowledge or release-readiness claim.
+
+CI also saves seven-day synthetic screenshot artifacts for desktop, narrow desktop,
+and touch/mobile-emulated login, vault, owner sharing and admin views. A separate
+fresh fixture process prevents visual navigation from consuming the authentication
+smoke's rate limit. Initial captures exposed missing viewport metadata and shared
+username/control overflow; device-width metadata and bounded wrapping fix these
+without changing the workflow. Assertions check mobile viewport width, page
+horizontal overflow and selected-item control containment. Screenshots contain
+public fixtures only, captured with vault values hidden; no cookies/storage-state
+files are uploaded. Manual taste/accessibility review remains useful.
