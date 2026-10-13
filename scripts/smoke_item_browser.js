@@ -17,9 +17,23 @@ function ciphertext() {
     const options = {headless: true};
     if (process.env.BROWSER_SMOKE_CHROMIUM) options.executablePath = process.env.BROWSER_SMOKE_CHROMIUM;
     const browser = await chromium.launch(options);
+    const externalRequests = [];
+    const policyViolations = [];
+    async function prepareContext(ctx) {
+        await ctx.exposeBinding('recordPolicyViolation', (_, directive) => policyViolations.push(directive));
+        await ctx.addInitScript(() => {
+            document.addEventListener('securitypolicyviolation', event => window.recordPolicyViolation(event.effectiveDirective));
+        });
+        await ctx.route('**/*', route => {
+            if (new URL(route.request().url()).origin === base) return route.continue();
+            externalRequests.push(route.request().url());
+            return route.abort();
+        });
+    }
     const context = await browser.newContext();
+    await prepareContext(context);
     // This smoke makes no external network requests; app scripts/styles are local.
-    await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     // Install before page scripts create any timers; later fastForward controls them.
@@ -221,13 +235,20 @@ function ciphertext() {
         });
         const oldCookies = await context.cookies();
         const adminContext = await browser.newContext();
-        await adminContext.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+        await prepareContext(adminContext);
         const adminPage = await adminContext.newPage();
+        adminPage.on('pageerror', error => failures.push(error.message));
         try {
             await adminPage.goto(`${base}/login`);
             await adminPage.locator('#username').fill('BROWSERADMIN');
             await adminPage.locator('#password').fill('Public-login-fixture-123!');
             await Promise.all([adminPage.waitForURL('**/dashboard'), adminPage.getByRole('button', {name: 'Login', exact: true}).click()]);
+            assert.equal((await adminPage.goto(`${base}/create_user`)).status(), 200);
+            assert.equal((await adminPage.goto(`${base}/audit_log_viewer`)).status(), 200);
+            await adminPage.waitForFunction(() => [...document.querySelectorAll('#audit-logs-table tbody tr')].some(row => row.cells.length === 5 && row.querySelector('.event-type')));
+            await adminPage.locator('#message-filter').fill('NO-SUCH-PUBLIC-AUDIT-FIXTURE');
+            assert.equal(await adminPage.locator('#audit-logs-table tbody tr:visible').count(), 0);
+            await adminPage.locator('#clear-filters').click();
             await adminPage.goto(`${base}/view_users`);
             const resetCsrf = await adminPage.locator('[name=csrf_token]').first().inputValue();
             const resetStatus = await adminPage.evaluate(async ({id, csrf}) => (await fetch(`/update_user/${id}`, {
@@ -257,8 +278,21 @@ function ciphertext() {
         await page.locator('#hide-password').click();
         await hidden();
         console.log('PASS committed admin reset invalidates copied browser cookie, stale-page reveal and JWT; fresh login restores authorized shared reveal');
-        // Bootstrap expects external jQuery, intentionally blocked in this local-only smoke.
-        assert(failures.every(message => /jQuery/.test(message)), JSON.stringify(failures));
-        console.log(JSON.stringify({status: 'passed', browser: browser.version(), headless: true, server: 'Gunicorn single worker, real app routes', csrf: 'enabled; actual form tokens', cookie: 'production Secure flag unchanged; Chromium localhost exception', externalNetwork: 'blocked', expectedExternalJqueryErrors: failures.length, limitation: 'single browser/local synthetic data; Playwright default disables BFCache; no deployment or security-readiness claim'}));
+        assert.deepEqual(failures, [], 'Application scripts must run without ignored jQuery errors');
+        assert.deepEqual(externalRequests, [], 'UI must not depend on external resources');
+        assert.deepEqual(policyViolations, [], 'Normal UI must satisfy the enforced CSP');
+        await page.evaluate(() => {
+            document.addEventListener('securitypolicyviolation', event => {
+                if (event.effectiveDirective === 'script-src-elem') window.syntheticInlineCspViolation = true;
+            });
+            const script = document.createElement('script');
+            script.textContent = 'window.syntheticInlineCspProbe = true';
+            document.body.appendChild(script);
+        });
+        await page.waitForFunction(() => window.syntheticInlineCspViolation === true);
+        const blocked = await page.evaluate(() => window.syntheticInlineCspProbe !== true);
+        assert.equal(blocked, true, 'Real browser must block injected inline scripts');
+        console.log('PASS same-origin assets, zero normal CSP violations, actual inline-script blocking');
+        console.log(JSON.stringify({status: 'passed', browser: browser.version(), headless: true, server: 'Gunicorn single worker, real app routes', csrf: 'enabled; actual form tokens', cookie: 'production Secure flag unchanged; Chromium localhost exception', externalNetwork: 'blocked', applicationErrors: failures.length, externalRequests: externalRequests.length, cspInlineScriptBlocked: blocked, limitation: 'single browser/local synthetic data; Playwright default disables BFCache; no deployment or security-readiness claim'}));
     } finally { await context.close(); await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
