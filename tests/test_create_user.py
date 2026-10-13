@@ -1,4 +1,4 @@
-from auth_helpers import auth_identity_for
+from auth_helpers import auth_identity_for, credential_binding_for
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
@@ -59,6 +59,7 @@ def test_employee_cannot_create_user(client):
     with client.session_transaction() as sess:
         sess['user_id'] = 2
         sess['auth_identity'] = auth_identity_for(client, 2)
+        sess['credential_binding'] = credential_binding_for(client, 2)
         sess['username'] = 'EMPLOYEE'
         sess['role'] = 'employee'
     response = client.post('/create_user', data={'username': 'newemp', 'password': 'Secret1!', 'role': 'employee'})
@@ -76,6 +77,7 @@ def test_admin_can_create_user(client, monkeypatch):
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         sess['auth_identity'] = auth_identity_for(client, 1)
+        sess['credential_binding'] = credential_binding_for(client, 1)
         sess['username'] = 'ADMIN'
         sess['role'] = 'admin'
     response = client.post('/create_user', data={'username': 'newuser', 'password': 'Secret1!', 'role': 'employee'})

@@ -81,8 +81,10 @@ remain plaintext metadata. Initial vault rendering avoids password contents, not
 all sensitive information. Existing inline/third-party scripts and server
 compromise remain risks. An authorized malicious client can deliberately reveal
 each item. Permission checks reflect the database when checked; no serializable
-concurrent revocation guarantee, reset/lock session revocation or backup rollback
-reconciliation is introduced. UUIDs have active uniqueness checks but no historic
+concurrent revocation guarantee, lock-triggered revocation or backup rollback
+reconciliation is introduced. A later [password-change session
+binding](password-session-revocation.md) does enforce password-reset revocation
+at the next authentication check. UUIDs have active uniqueness checks but no historic
 tombstone registry. Mobile builds may retain secrets fetched from an old backend;
 this change cannot remove those copies.
 

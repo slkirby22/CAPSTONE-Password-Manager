@@ -17,8 +17,10 @@ administrator-only, with their prior redirect/401/403 contracts.
 JWT-protected routes also resolve the token subject to a current account. A
 signed token for a deleted/missing account receives generic HTTP 401, before
 any credential mutation. This closes the orphan-row creation path. This does
-not introduce session-versioning, token rotation or lock-triggered revocation:
-locking continues to deny subsequent login, not revoke existing sessions.
+not introduce lock-triggered revocation: locking continues to deny subsequent
+login, not revoke existing sessions. The later
+[password-change binding](password-session-revocation.md) revokes cookies/JWTs
+when the account password replacement commits.
 
 ## Legacy actor/target matrix
 

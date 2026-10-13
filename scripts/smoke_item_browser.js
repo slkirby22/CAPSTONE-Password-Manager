@@ -52,11 +52,11 @@ function ciphertext() {
         await page.waitForFunction(value => document.querySelector('#revealed-password').textContent === value, value);
         assert.equal(await page.locator('#replacement-password').count() ? await page.locator('#replacement-password').inputValue() : '', '');
     }
-    async function login(name) {
+    async function login(name, password = 'Public-login-fixture-123!') {
         await page.goto(`${base}/login`);
         assert(await page.locator('[name=csrf_token]').inputValue());
         await page.locator('#username').fill(name);
-        await page.locator('#password').fill('Public-login-fixture-123!');
+        await page.locator('#password').fill(password);
         await Promise.all([page.waitForURL('**/dashboard'), page.getByRole('button', {name: 'Login', exact: true}).click()]);
         const cookie = (await context.cookies()).find(cookie => cookie.name === 'session');
         assert(cookie && cookie.secure && cookie.httpOnly && cookie.sameSite === 'Lax');
@@ -208,6 +208,55 @@ function ciphertext() {
         const unshared = await page.evaluate(async id => (await fetch(`/passwords/${id}`, {credentials: 'same-origin'})).status, fixture.second);
         assert.equal(unshared, 404);
         console.log('PASS logout/back cleanup; shared reveal, absent mutation controls, real-CSRF mutation rejection, unshared item rejection');
+        // Reset a disposable shared account while retaining its actual browser
+        // cookie, page CSRF token, and independently issued JWT.
+        await page.locator('#hide-password').click();
+        await hidden();
+        const sharedToken = await page.evaluate(async () => {
+            const response = await fetch('/api/login', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: 'BROWSERSHARED', password: 'Public-login-fixture-123!'})});
+            if (response.status !== 200) throw new Error('Synthetic API login failed');
+            return (await response.json()).access_token;
+        });
+        const oldCookies = await context.cookies();
+        const adminContext = await browser.newContext();
+        await adminContext.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+        const adminPage = await adminContext.newPage();
+        try {
+            await adminPage.goto(`${base}/login`);
+            await adminPage.locator('#username').fill('BROWSERADMIN');
+            await adminPage.locator('#password').fill('Public-login-fixture-123!');
+            await Promise.all([adminPage.waitForURL('**/dashboard'), adminPage.getByRole('button', {name: 'Login', exact: true}).click()]);
+            await adminPage.goto(`${base}/view_users`);
+            const resetCsrf = await adminPage.locator('[name=csrf_token]').first().inputValue();
+            const resetStatus = await adminPage.evaluate(async ({id, csrf}) => (await fetch(`/update_user/${id}`, {
+                method: 'POST', body: new URLSearchParams({csrf_token: csrf,
+                    username: 'BROWSERSHARED', password: 'Public-reset-fixture-456!', role: 'employee'})
+            })).status, {id: fixture.shared_id, csrf: resetCsrf});
+            assert.equal(resetStatus, 200);
+            const pending = page.waitForResponse(response => response.url().endsWith('/reveal'));
+            await page.locator('#reveal-password').click();
+            assert.equal((await pending).status(), 401);
+            await page.waitForFunction(() => document.querySelector('#reveal-status').textContent.includes('Password unavailable.'));
+            await hidden();
+            assert(!(await page.content()).includes(replacement));
+            // Replay the copied pre-reset cookie, not just the browser's cleared copy.
+            await context.addCookies(oldCookies);
+            const replay = await page.evaluate(async ({id, csrf, token}) => {
+                const reveal = await fetch(`/passwords/${id}/reveal`, {method: 'POST', headers: {'X-CSRFToken': csrf}});
+                const api = await fetch('/api/dashboard', {headers: {Authorization: 'Bearer ' + token}});
+                return {web: reveal.status, jwt: api.status};
+            }, {id: fixture.first, csrf, token: sharedToken});
+            assert.deepEqual(replay, {web: 401, jwt: 401});
+            assert.equal((await adminPage.goto(`${base}/view_users`)).status(), 200);
+        } finally { await adminContext.close(); }
+        await login('BROWSERSHARED', 'Public-reset-fixture-456!');
+        await select(fixture.first);
+        await reveal(replacement);
+        await page.locator('#hide-password').click();
+        await hidden();
+        console.log('PASS committed admin reset invalidates copied browser cookie, stale-page reveal and JWT; fresh login restores authorized shared reveal');
         // Bootstrap expects external jQuery, intentionally blocked in this local-only smoke.
         assert(failures.every(message => /jQuery/.test(message)), JSON.stringify(failures));
         console.log(JSON.stringify({status: 'passed', browser: browser.version(), headless: true, server: 'Gunicorn single worker, real app routes', csrf: 'enabled; actual form tokens', cookie: 'production Secure flag unchanged; Chromium localhost exception', externalNetwork: 'blocked', expectedExternalJqueryErrors: failures.length, limitation: 'single browser/local synthetic data; Playwright default disables BFCache; no deployment or security-readiness claim'}));

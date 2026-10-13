@@ -39,14 +39,15 @@ def main():
             db.create_all()
             owner = User('BROWSEROWNER', pwd_context.hash('Public-login-fixture-123!'), 'employee')
             shared = User('BROWSERSHARED', pwd_context.hash('Public-login-fixture-123!'), 'employee')
-            db.session.add_all([owner, shared])
+            admin = User('BROWSERADMIN', pwd_context.hash('Public-login-fixture-123!'), 'admin')
+            db.session.add_all([owner, shared, admin])
             db.session.flush()
             cipher = Fernet(app.config['ENCRYPTION_KEY'])
             first = Password('Duplicate service', 'first-login', cipher.encrypt(b'Public-item-one-123!'), 'first notes', owner.id, [shared])
             second = Password('Duplicate service', 'second-login', cipher.encrypt(b'Public-item-two-123!'), 'second notes', owner.id)
             db.session.add_all([first, second])
             db.session.commit()
-            fixture = {'first': first.item_id, 'second': second.item_id, 'ciphertext': first.password.decode()}
+            fixture = {'first': first.item_id, 'second': second.item_id, 'ciphertext': first.password.decode(), 'shared_id': shared.id}
         env = dict(os.environ, BROWSER_SMOKE_BASE=f'http://localhost:{port}',
                    BROWSER_SMOKE_FIXTURE=json.dumps(fixture),
                    BROWSER_SMOKE_DB=f'{directory}/synthetic.db', BROWSER_SMOKE_PYTHON=sys.executable)

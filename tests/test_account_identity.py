@@ -9,6 +9,8 @@ from cryptography.fernet import Fernet
 from flask_jwt_extended import create_access_token, decode_token
 
 from app import app, limiter
+from authorization import credential_binding
+from auth_helpers import credential_binding_for
 from functions import pwd_context
 from models import Password, User, audit_log, db
 
@@ -75,7 +77,8 @@ def test_deleted_account_credentials_never_become_replacement_account(clients):
 def test_legacy_or_mismatched_web_binding_fails_closed(clients, binding):
     client, _ = clients
     with client.session_transaction() as session:
-        session.update(user_id=1, username='ADMIN', role='admin')
+        session.update(user_id=1, username='ADMIN', role='admin',
+                       credential_binding=credential_binding_for(client, 1))
         if binding is not None:
             session['auth_identity'] = binding
     assert client.get('/get_audit_logs').status_code == 401
@@ -87,7 +90,9 @@ def test_legacy_or_mismatched_web_binding_fails_closed(clients, binding):
 def test_legacy_or_mismatched_jwt_binding_fails_closed(clients, binding):
     client, _ = clients
     with app.app_context():
-        claims = {} if binding is None else {'auth_identity': binding}
+        claims = {'credential_binding': credential_binding(db.session.get(User, 1), 'jwt')}
+        if binding is not None:
+            claims['auth_identity'] = binding
         token = create_access_token(identity='1', additional_claims=claims)
     assert client.get('/api/dashboard', headers={'Authorization': f'Bearer {token}'}).status_code == 401
 

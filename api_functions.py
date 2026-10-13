@@ -1,3 +1,4 @@
+from authorization import authentication_claims
 from functions import log_event
 from models import db, User, TokenBlacklist
 from flask_jwt_extended import create_access_token, get_jwt
@@ -27,6 +28,7 @@ def authenticate_and_get_token(username, password):
         )
         return None
 
+    claims = authentication_claims(user, 'jwt')
     try:
         password_matches = pwd_context.verify(password, user.password)
     except (TypeError, ValueError):
@@ -49,7 +51,7 @@ def authenticate_and_get_token(username, password):
     db.session.commit()
 
     access_token = create_access_token(
-        identity=str(user.id), additional_claims={'auth_identity': user.auth_identity})
+        identity=str(user.id), additional_claims=claims)
 
     log_event(
         f"User {user.username} authenticated via API.",
