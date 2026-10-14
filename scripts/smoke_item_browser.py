@@ -32,7 +32,7 @@ def main():
         )
         os.environ.pop('RENDER', None)
         from app import app
-        from models import db, Password, User
+        from models import db, Password, User, audit_log
         from functions import pwd_context
         from cryptography.fernet import Fernet
         with app.app_context():
@@ -45,6 +45,13 @@ def main():
             cipher = Fernet(app.config['ENCRYPTION_KEY'])
             first = Password('Duplicate service', 'first-login', cipher.encrypt(b'Public-item-one-123!'), 'first notes', owner.id, [shared])
             second = Password('Duplicate service', 'second-login', cipher.encrypt(b'Public-item-two-123!'), 'second notes', owner.id)
+            from datetime import datetime
+            db.session.add_all([
+                audit_log(event_time=datetime(2025, 1, 1, 12), event_message='Synthetic audit first day', event_type='FIXTURE', user_id=None),
+                audit_log(event_time=datetime(2025, 1, 2), event_message='Synthetic audit second day midnight', event_type='FIXTURE', user_id=None),
+                audit_log(event_time=datetime(2025, 1, 2, 23, 59, 59, 999999), event_message='Synthetic audit second day late', event_type='FIXTURE', user_id=None),
+                audit_log(event_time=datetime(2025, 1, 2, 12), event_message='Synthetic excluded message', event_type='OTHER', user_id=None),
+            ])
             db.session.add_all([first, second])
             db.session.commit()
             fixture = {'first': first.item_id, 'second': second.item_id, 'ciphertext': first.password.decode(), 'shared_id': shared.id}

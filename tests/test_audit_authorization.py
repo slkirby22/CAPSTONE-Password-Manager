@@ -126,11 +126,11 @@ def test_json_uses_current_database_admin_and_preserves_contract(client, session
 
 @pytest.mark.parametrize(('query', 'expected_ids'), [
     ('start_date=2025-01-02', {102, 103}),
-    ('end_date=2025-01-03', {101, 102}),
-    ('start_date=2025-01-02&end_date=2025-01-03', {102}),
+    ('end_date=2025-01-03', {101, 102, 103}),
+    ('start_date=2025-01-02&end_date=2025-01-03', {102, 103}),
     ('start_date=2025-01-04', set()),
 ])
-def test_admin_date_filters_unchanged(client, query, expected_ids):
+def test_admin_date_filters_include_entire_selected_end_day(client, query, expected_ids):
     client, _ = client
     set_session(client, 1)
     response = client.get('/get_audit_logs?' + query)
@@ -193,3 +193,42 @@ def test_denied_json_request_does_not_query_audit_records(client, user_id):
         event.remove(engine, 'before_cursor_execute', capture_statement)
     assert response.status_code in (401, 403)
     assert not any('from audit_log' in statement for statement in statements)
+
+
+@pytest.mark.parametrize('query', [
+    'start_date=2025-02-30', 'end_date=2025-1-2',
+    'start_date=2025-01-01T12:00:00', 'end_date=not-a-date',
+    'start_date=2025-01-03&end_date=2025-01-02',
+    'start_date=2025-01-01&start_date=2025-01-02',
+    'end_date=0000-01-01',
+])
+def test_admin_rejects_invalid_date_filters_without_echoing_values(client, query):
+    client, _ = client
+    set_session(client, 1)
+    response = client.get('/get_audit_logs?' + query)
+    assert response.status_code == 400
+    assert set(response.json) == {'error'}
+    assert 'Synthetic selected event' not in response.text
+    assert 'not-a-date' not in response.text
+
+
+def test_same_day_range_includes_midnight_and_final_microsecond(client):
+    client, app = client
+    set_session(client, 1)
+    with app.app_context():
+        for ident, timestamp in [(201, datetime(2025, 1, 2)),
+                                 (202, datetime(2025, 1, 2, 23, 59, 59, 999999)),
+                                 (203, datetime(2025, 1, 3))]:
+            db.session.add(audit_log(id=ident, event_time=timestamp, event_message='boundary', event_type='TEST'))
+        db.session.commit()
+    response = client.get('/get_audit_logs?start_date=2025-01-02&end_date=2025-01-02')
+    assert response.status_code == 200
+    assert {x['id'] for x in response.json} == {102, 201, 202}
+
+
+def test_maximum_supported_end_date_does_not_overflow(client):
+    client, _ = client
+    set_session(client, 1)
+    response = client.get('/get_audit_logs?end_date=9999-12-31')
+    assert response.status_code == 200
+    assert {x['id'] for x in response.json} == {101, 102, 103}

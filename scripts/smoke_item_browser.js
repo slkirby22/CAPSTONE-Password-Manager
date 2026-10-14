@@ -32,7 +32,7 @@ function ciphertext() {
             return route.abort();
         });
     }
-    const context = await browser.newContext();
+    const context = await browser.newContext({timezoneId: 'America/New_York'});
     await prepareContext(context);
     // This smoke makes no external network requests; app scripts/styles are local.
 
@@ -173,6 +173,63 @@ function ciphertext() {
             await page.locator('.error').waitFor();
             assert((await page.locator('.error').textContent()).includes('Username'));
             assert.equal(await page.locator('input[name=username]').inputValue(), 'BROWSERSHARED');
+            await page.goto(`${base}/audit_log_viewer`);
+            await page.waitForFunction(() => [...document.querySelectorAll('#audit-logs-table tbody tr')].some(row => row.cells.length === 5));
+            // Hold actual server JSON after it arrives, then release in reverse order.
+            await page.evaluate(() => {
+                const original = window.fetch;
+                window.__auditHeld = [];
+                window.fetch = async (...args) => {
+                    const response = await original(...args);
+                    if (String(args[0]).startsWith('/get_audit_logs')) {
+                        const body = await response.json();
+                        return {ok: response.ok, json: () => new Promise((resolve, reject) => window.__auditHeld.push({body, resolve, reject}))};
+                    }
+                    return response;
+                };
+            });
+            // Set both fields without implicit input/change events producing extra requests.
+            async function exactAuditRange(day) {
+                await page.evaluate(day => {
+                    document.querySelector('#start-date').value = day;
+                    document.querySelector('#end-date').value = day;
+                    document.querySelector('#end-date').dispatchEvent(new Event('change'));
+                }, day);
+            }
+            await exactAuditRange('2025-01-01');
+            await page.waitForFunction(() => window.__auditHeld.length === 1);
+            await page.locator('#message-filter').fill('second day');
+            await exactAuditRange('2025-01-02');
+            await page.waitForFunction(() => window.__auditHeld.length === 2);
+            await page.evaluate(() => {const next = window.__auditHeld[1]; next.resolve(next.body);});
+            await page.waitForFunction(() => document.querySelectorAll('#audit-logs-table tbody tr').length === 3);
+            const visibleAudit = page.locator('#audit-logs-table tbody tr:visible');
+            assert.equal(await visibleAudit.count(), 2);
+            assert((await visibleAudit.allTextContents()).every(text => text.includes('second day')));
+            await page.locator('#event-type-filter').selectOption('FIXTURE');
+            await page.evaluate(() => {const old = window.__auditHeld[0]; old.resolve(old.body);});
+            await page.waitForTimeout(75);
+            assert.equal(await visibleAudit.count(), 2);
+            assert(!(await page.locator('#audit-logs-table tbody').textContent()).includes('first day'));
+            // A late failure must not erase a successful newer range either.
+            await exactAuditRange('2025-01-01');
+            await page.waitForFunction(() => window.__auditHeld.length === 3);
+            await page.locator('#message-filter').fill('second day');
+            await exactAuditRange('2025-01-02');
+            await page.waitForFunction(() => window.__auditHeld.length === 4);
+            await page.evaluate(() => {const next = window.__auditHeld[3]; next.resolve(next.body);});
+            await page.waitForFunction(() => document.querySelectorAll('#audit-logs-table tbody tr').length === 3);
+            await page.evaluate(() => window.__auditHeld[2].reject(new Error('Synthetic late response failure')));
+            await page.waitForTimeout(75);
+            assert.equal(await page.locator('#event-type-filter').inputValue(), 'FIXTURE');
+            assert.equal(await visibleAudit.count(), 2);
+            const downloaded = page.waitForEvent('download');
+            await page.locator('#export-csv').click();
+            const download = await downloaded;
+            const csv = fs.readFileSync(await download.path(), 'utf8');
+            assert(csv.includes('second day midnight') && csv.includes('second day late'));
+            assert(!csv.includes('first day') && !csv.includes('excluded message') && !csv.includes('Loading...'));
+            console.log('PASS real audit same-day range, latest-response wins, loading filters, preserved text/type filters and filtered CSV under America/New_York');
             assert.deepEqual(failures, []);
             assert.deepEqual(externalRequests, []);
             assert.deepEqual(policyViolations, []);

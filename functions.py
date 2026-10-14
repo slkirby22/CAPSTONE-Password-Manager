@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify, g
 from models import db, User, Password, audit_log
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import re
@@ -512,15 +512,33 @@ def audit_log_viewer():
 
 @require_web_user('admin', json_response=True)
 def get_audit_logs():
-    # Get the start and end dates from the request
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
+    # The UI selects whole calendar days in the stored audit timestamp's
+    # existing source timezone. Do not reinterpret them in the browser timezone.
+    bounds = {}
+    for name in ('start_date', 'end_date'):
+        values = request.args.getlist(name)
+        if len(values) > 1:
+            return jsonify({'error': 'Provide one value per date filter'}), 400
+        value = values[0] if values else ''
+        if not value:
+            bounds[name] = None
+            continue
+        if not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
+            return jsonify({'error': 'Dates must use YYYY-MM-DD'}), 400
+        try:
+            bounds[name] = datetime.strptime(value, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid calendar date'}), 400
+    start_date, end_date = bounds['start_date'], bounds['end_date']
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'Start date must not follow end date'}), 400
 
     query = audit_log.query
     if start_date:
         query = query.filter(audit_log.event_time >= start_date)
     if end_date:
-        query = query.filter(audit_log.event_time <= end_date)
+        # Inclusive final microsecond also supports 9999-12-31 without overflow.
+        query = query.filter(audit_log.event_time <= datetime.combine(end_date.date(), time.max))
 
     # Fetch the logs from the database and return them as JSON
     logs = query.all()
