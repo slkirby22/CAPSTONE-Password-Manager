@@ -54,7 +54,10 @@ class Element {
         return this.children;
     }
     remove(index) {
-        this.children.splice(index, 1);
+        const removed = this.children.splice(index, 1)[0];
+        if (this.tagName === 'SELECT' && removed?.value === this.value) {
+            this.value = this.children[0]?.value || '';
+        }
     }
     addEventListener() {}
     click() {
@@ -219,13 +222,15 @@ def test_refresh_filters_and_export_preserve_literal_text():
         populateEventTypeFilter();
         assert.equal(tbody.children.length, 1);
         assert.equal(tbody.children[0].cells[0].textContent, '3');
-        assert.equal(eventTypeFilter.options.length, 2);
+        assert.equal(eventTypeFilter.options.length, 3);
         assert.equal(eventTypeFilter.options[1].textContent, 'LOGIN');
+        assert.equal(eventTypeFilter.value, type);
         updateTable([]);
         populateEventTypeFilter();
         assert.equal(tbody.children.length, 0);
-        assert.equal(eventTypeFilter.options.length, 1);
+        assert.equal(eventTypeFilter.options.length, 2);
         assert.equal(eventTypeFilter.options[0].value, 'all');
+        assert.equal(eventTypeFilter.value, type);
     """)
 
 
@@ -274,3 +279,109 @@ def test_fetch_error_replaces_loading_with_five_column_status(failure):
         assert.equal(errors.length, 1);
         """
     )
+
+
+def test_filters_are_safe_during_loading_and_error():
+    run_audit_script(r"""
+        fetchAndUpdateLogs();
+        elements['message-filter'].value = 'match';
+        filterTable();
+        assert.equal(tbody.textContent, 'Loading...');
+        requests[0].reject(new Error('Synthetic failure'));
+        await flush();
+        filterTable();
+        assert.equal(tbody.textContent, 'Error loading data');
+        exportToCSV();
+        const csv = await downloads[0].text();
+        assert.equal(csv, 'Audit ID,Event Time,Event Message,Event Type,User ID');
+    """)
+
+
+@pytest.mark.parametrize('late_failure', [False, True])
+def test_stale_fetch_cannot_replace_current_result(late_failure):
+    run_audit_script(f'const lateFailure = {str(late_failure).lower()};\n' + r"""
+        fetchAndUpdateLogs();
+        fetchAndUpdateLogs();
+        const current = {id: 2, event_time: '2026-10-12 12:00:00', event_message: 'current', event_type: 'TEST', user_id: 1};
+        requests[1].resolve({ok: true, json: () => Promise.resolve([current])});
+        await flush();
+        if (lateFailure) requests[0].reject(new Error('Late failure'));
+        else requests[0].resolve({ok: true, json: () => Promise.resolve([{...current, id: 1, event_message: 'stale'}])});
+        await flush();
+        assert.equal(tbody.children[0].cells[2].textContent, 'current');
+        assert.equal(errors.length, 0);
+    """)
+
+
+def test_filters_are_reapplied_when_refresh_finishes():
+    run_audit_script(r"""
+        elements['message-filter'].value = 'wanted';
+        fetchAndUpdateLogs();
+        const log = {id: 1, event_time: '2026-10-12 12:00:00', event_message: 'wanted', event_type: 'TEST', user_id: 1};
+        requests[0].resolve({ok: true, json: () => Promise.resolve([log, {...log, id: 2, event_message: 'other'}])});
+        await flush();
+        assert.equal(tbody.children[0].style.display, '');
+        assert.equal(tbody.children[1].style.display, 'none');
+    """)
+
+
+@pytest.mark.parametrize('timezone', ['America/New_York', 'UTC', 'Asia/Tokyo'])
+def test_date_filter_uses_source_calendar_not_browser_timezone(monkeypatch, timezone):
+    monkeypatch.setenv('TZ', timezone)
+    run_audit_script(r"""
+        elements['start-date'].value = '2026-10-12';
+        elements['end-date'].value = '2026-10-12';
+        updateTable([{id: 1, event_time: '2026-10-12 23:59:59', event_message: 'late same day', event_type: 'TEST', user_id: 1}]);
+        filterTable();
+        assert.equal(tbody.children[0].style.display, '');
+    """)
+
+
+def test_event_type_survives_range_refresh_and_clear_all_resets_dates():
+    run_audit_script(r"""
+        const log = {id: 1, event_time: '2026-10-12 12:00:00', event_message: 'item', event_type: 'SELECTED', user_id: 1};
+        updateTable([log]);
+        populateEventTypeFilter();
+        eventTypeFilter.value = 'SELECTED';
+        elements['start-date'].value = '2026-10-01';
+        elements['end-date'].value = '2026-10-12';
+        fetchAndUpdateLogs();
+        requests[0].resolve({ok: true, json: () => Promise.resolve([{...log, event_type: 'OTHER'}])});
+        await flush();
+        assert.equal(eventTypeFilter.value, 'SELECTED');
+        assert.equal(tbody.children[0].style.display, 'none');
+        clearAllFilters();
+        assert.equal(elements['start-date'].value, '');
+        assert.equal(elements['end-date'].value, '');
+        assert.equal(eventTypeFilter.value, 'all');
+        assert.equal(requests[1].url, '/get_audit_logs?start_date=&end_date=');
+    """)
+
+
+def test_old_json_body_resolving_late_cannot_replace_current_data():
+    run_audit_script(r"""
+        let finishOld;
+        const log = {id: 1, event_time: '2026-10-12 12:00:00', event_message: 'stale', event_type: 'TEST', user_id: 1};
+        fetchAndUpdateLogs();
+        requests[0].resolve({ok: true, json: () => new Promise(resolve => finishOld = resolve)});
+        await flush();
+        fetchAndUpdateLogs();
+        requests[1].resolve({ok: true, json: () => Promise.resolve([{...log, id: 2, event_message: 'current'}])});
+        await flush();
+        finishOld([log]);
+        await flush();
+        assert.equal(tbody.children[0].cells[2].textContent, 'current');
+    """)
+
+
+@pytest.mark.parametrize('value', ['=1+2', '+SUM(1,2)', '-1+2', '@SUM(1)', '\t=1+2', '\r\n=1+2', '\x00=1+2', '＝1+2', '＋1', '－1', '＠SUM(1)', '=1+2";,=3+4'])
+def test_csv_formula_shaped_values_receive_visible_text_prefix(value):
+    run_audit_script(f'const value = {json.dumps(value)};\n' + r"""
+        const log = {id: 1, event_time: '2026-10-12 12:00:00', event_message: value, event_type: 'TEST', user_id: 1};
+        updateTable([log]);
+        exportToCSV();
+        const csv = await downloads[0].text();
+        const expected = '"Text: ' + value.trim().replace(/"/g, '""') + '"';
+        assert(csv.includes(expected));
+        assert.equal(tbody.children[0].cells[2].textContent, value);
+    """)

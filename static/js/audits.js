@@ -1,3 +1,5 @@
+let auditRequestVersion = 0;
+
 document.addEventListener('DOMContentLoaded', function() {
     initializeAuditLog();
 });
@@ -34,6 +36,7 @@ function handleDateChange() {
 }
 
 function fetchAndUpdateLogs() {
+    const version = ++auditRequestVersion;
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
     
@@ -47,11 +50,14 @@ function fetchAndUpdateLogs() {
             return response.json();
         })
         .then(data => {
+            if (version !== auditRequestVersion) return;
             updateTable(data);
             // Re-populate event types with new data
             populateEventTypeFilter();
+            filterTable();
         })
         .catch(error => {
+            if (version !== auditRequestVersion) return;
             console.error('Error fetching logs:', error);
             showAuditStatus(tbody, 'Error loading data');
         });
@@ -91,6 +97,7 @@ function populateEventTypeFilter() {
     const eventTypes = new Set();
     const eventTypeCells = document.querySelectorAll('.event-type');
     const eventTypeFilter = document.getElementById('event-type-filter');
+    const selectedType = eventTypeFilter.value;
     
     // Clear existing options except "All"
     while (eventTypeFilter.options.length > 1) {
@@ -102,6 +109,9 @@ function populateEventTypeFilter() {
         eventTypes.add(cell.textContent.trim());
     });
     
+    // Keep an explicit filter selected even when the new range has no matches.
+    if (selectedType && selectedType !== 'all') eventTypes.add(selectedType);
+
     // Add options to select
     eventTypes.forEach(type => {
         const option = document.createElement('option');
@@ -109,6 +119,7 @@ function populateEventTypeFilter() {
         option.textContent = type;
         eventTypeFilter.appendChild(option);
     });
+    eventTypeFilter.value = selectedType || 'all';
 }
 
 function filterTable() {
@@ -124,6 +135,8 @@ function filterTable() {
     const endDate = document.getElementById('end-date').value;
 
     rows.forEach(row => {
+        // Loading/error status rows span five columns but have only one cell.
+        if (row.cells.length !== 5) return;
         const auditId = row.cells[0].textContent.toLowerCase();
         const eventTime = row.cells[1].textContent.trim();
         const eventMessage = row.cells[2].textContent.toLowerCase();
@@ -146,25 +159,12 @@ function filterTable() {
             showRow = false;
         }
 
-        // Apply date range filter
-        if (startDate || endDate) {
-            const eventDate = new Date(eventTime);
-            
-            if (startDate) {
-                const start = new Date(startDate);
-                if (eventDate < start) {
-                    showRow = false;
-                }
-            }
-            
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59); // Include entire end day
-                if (eventDate > end) {
-                    showRow = false;
-                }
-            }
-        }
+        // Dates are in the audit source's calendar, not the browser's timezone.
+        // The API uses the same inclusive YYYY-MM-DD range. Avoid Date parsing,
+        // which treats date-only inputs as UTC but event timestamps as local.
+        const eventDate = eventTime.slice(0, 10);
+        if (startDate && eventDate < startDate) showRow = false;
+        if (endDate && eventDate > endDate) showRow = false;
 
         // Toggle row visibility
         row.style.display = showRow ? '' : 'none';
@@ -176,12 +176,22 @@ function clearAllFilters() {
     document.getElementById('id-filter').value = '';
     document.getElementById('message-filter').value = '';
     document.getElementById('user-id-filter').value = '';
+    document.getElementById('start-date').value = '';
     document.getElementById('end-date').value = '';
     document.getElementById('event-type-filter').value = 'all';
 
     // Re-filter the table to show all rows
     filterTable();
     handleDateChange(); // Fetch logs with cleared filters
+}
+
+function auditCsvCell(text) {
+    let value = text.trim();
+    // CSV quoting escapes structure, not spreadsheet formulas. A visible literal
+    // prefix avoids relying on spreadsheet-specific apostrophe interpretation.
+    // This is a display export; stored/rendered audit text remains unchanged.
+    if (/^[=+\-@\u0000-\u001f\u007f＝＋－＠]/.test(value)) value = 'Text: ' + value;
+    return `"${value.replace(/"/g, '""')}"`;
 }
 
 function exportToCSV() {
@@ -198,10 +208,10 @@ function exportToCSV() {
 
     // Add visible rows
     rows.forEach(row => {
-        if (row.style.display !== 'none') {
+        if (row.cells.length === 5 && row.style.display !== 'none') {
             const rowData = [];
             row.querySelectorAll('td').forEach(cell => {
-                rowData.push(`"${cell.textContent.trim().replace(/"/g, '""')}"`);
+                rowData.push(auditCsvCell(cell.textContent));
             });
             csvContent.push(rowData.join(','));
         }

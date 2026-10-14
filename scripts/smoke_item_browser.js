@@ -2,6 +2,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 const {chromium} = require('playwright');
 const base = process.env.BROWSER_SMOKE_BASE;
 const fixture = JSON.parse(process.env.BROWSER_SMOKE_FIXTURE);
@@ -17,9 +19,23 @@ function ciphertext() {
     const options = {headless: true};
     if (process.env.BROWSER_SMOKE_CHROMIUM) options.executablePath = process.env.BROWSER_SMOKE_CHROMIUM;
     const browser = await chromium.launch(options);
-    const context = await browser.newContext();
+    const externalRequests = [];
+    const policyViolations = [];
+    async function prepareContext(ctx) {
+        await ctx.exposeBinding('recordPolicyViolation', (_, directive) => policyViolations.push(directive));
+        await ctx.addInitScript(() => {
+            document.addEventListener('securitypolicyviolation', event => window.recordPolicyViolation(event.effectiveDirective));
+        });
+        await ctx.route('**/*', route => {
+            if (new URL(route.request().url()).origin === base) return route.continue();
+            externalRequests.push(route.request().url());
+            return route.abort();
+        });
+    }
+    const context = await browser.newContext({timezoneId: 'America/New_York'});
+    await prepareContext(context);
     // This smoke makes no external network requests; app scripts/styles are local.
-    await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     // Install before page scripts create any timers; later fastForward controls them.
@@ -79,7 +95,148 @@ function ciphertext() {
         await page.evaluate(() => window.__held.shift()());
         await page.waitForTimeout(75);
     }
+    const screenshotDir = process.env.BROWSER_SMOKE_VISUAL_ONLY === '1' ? process.env.BROWSER_SMOKE_SCREENSHOTS : null;
+    const layoutReports = [];
+    async function capture(target, name) {
+        if (!screenshotDir) return;
+        fs.mkdirSync(screenshotDir, {recursive: true});
+        const previous = target.viewportSize();
+        for (const [size, viewport] of Object.entries({desktop: {width: 1440, height: 1000}, narrow: {width: 390, height: 844}})) {
+            await target.setViewportSize(viewport);
+            await target.evaluate(() => document.fonts.ready);
+            await target.screenshot({path: path.join(screenshotDir, `${name}-${size}.png`), fullPage: true});
+            layoutReports.push(await target.evaluate(({name, size}) => ({name, size,
+                viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+                viewportMeta: document.querySelector('meta[name="viewport"]')?.content || null,
+                controls: [...document.querySelectorAll('button,input:not([type="hidden"]),select,a.btn')].filter(el => el.getClientRects().length).map(el => {
+                    const r = el.getBoundingClientRect();
+                    return {label: el.textContent.trim() || el.getAttribute('aria-label') || el.id || el.name,
+                        x: r.x, y: r.y, width: r.width, height: r.height};
+                })}), {name, size}));
+        }
+        await target.setViewportSize(previous);
+        const mobileContext = await browser.newContext({viewport: {width: 390, height: 844},
+            isMobile: true, hasTouch: true, deviceScaleFactor: 1,
+            storageState: await target.context().storageState()});
+        await prepareContext(mobileContext);
+        try {
+            const mobile = await mobileContext.newPage();
+            mobile.on('pageerror', error => failures.push(error.message));
+            await mobile.goto(target.url());
+            await mobile.evaluate(() => document.fonts.ready);
+            await mobile.screenshot({path: path.join(screenshotDir, `${name}-mobile.png`), fullPage: true});
+            layoutReports.push(await mobile.evaluate(name => ({name, size: 'mobile-emulated',
+                viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+                viewportMeta: document.querySelector('meta[name="viewport"]')?.content || null}), name));
+            const geometry = layoutReports[layoutReports.length - 1];
+            assert.equal(geometry.viewport, 390, 'Mobile layout must use the device viewport');
+            assert(geometry.scrollWidth <= 390, 'Mobile page must not overflow horizontally');
+            const overflow = await mobile.locator('.password-form input:not([type=hidden]), .password-form button, .password-form li').evaluateAll(elements => elements.filter(el => {
+                const outer = el.closest('.password-form').getBoundingClientRect();
+                const inner = el.getBoundingClientRect();
+                return el.getClientRects().length && (inner.left < outer.left - 1 || inner.right > outer.right + 1);
+            }).length);
+            assert.equal(overflow, 0, 'Item controls must remain inside their card');
+        } finally { await mobileContext.close(); }
+        fs.writeFileSync(path.join(screenshotDir, 'layout-report.json'), JSON.stringify(layoutReports, null, 2));
+    }
     try {
+        if (process.env.BROWSER_SMOKE_VISUAL_ONLY === '1') {
+            assert(screenshotDir, 'Visual-only run requires an artifact directory');
+            await page.goto(`${base}/login`);
+            await capture(page, 'login');
+            await login('BROWSEROWNER');
+            await capture(page, 'vault');
+            await select(fixture.first);
+            await capture(page, 'owner-share');
+            await page.goto(`${base}/logout`);
+            await login('BROWSERADMIN');
+            await page.goto(`${base}/view_users`);
+            await capture(page, 'admin-users');
+            await page.goto(`${base}/create_user`);
+            await page.locator('#username').fill('PUBLIC-INVALID-BOUND');
+            await page.locator('#password').fill('A1!' + 'x'.repeat(4096));
+            let submitted = page.waitForResponse(response => new URL(response.url()).pathname === '/create_user' && response.request().method() === 'POST');
+            await page.getByRole('button', {name: 'Create User', exact: true}).click();
+            assert.equal((await submitted).status(), 400);
+            await page.locator('.error').waitFor();
+            assert((await page.locator('.error').textContent()).includes('4096'));
+            assert.equal(await page.locator('#password').inputValue(), '');
+            await page.goto(`${base}/view_users`);
+            await page.locator('#selected_user_id').selectOption(String(fixture.shared_id));
+            await Promise.all([page.waitForNavigation(), page.getByRole('button', {name: 'Edit Selected User', exact: true}).click()]);
+            await page.locator('input[name=username]').fill('');
+            await page.locator('input[name=username]').evaluate(element => element.removeAttribute('required'));
+            submitted = page.waitForResponse(response => new URL(response.url()).pathname === `/update_user/${fixture.shared_id}`);
+            await page.getByRole('button', {name: 'Update User', exact: true}).click();
+            assert.equal((await submitted).status(), 400);
+            await page.locator('.error').waitFor();
+            assert((await page.locator('.error').textContent()).includes('Username'));
+            assert.equal(await page.locator('input[name=username]').inputValue(), 'BROWSERSHARED');
+            await page.goto(`${base}/audit_log_viewer`);
+            await page.waitForFunction(() => [...document.querySelectorAll('#audit-logs-table tbody tr')].some(row => row.cells.length === 5));
+            // Hold actual server JSON after it arrives, then release in reverse order.
+            await page.evaluate(() => {
+                const original = window.fetch;
+                window.__auditHeld = [];
+                window.fetch = async (...args) => {
+                    const response = await original(...args);
+                    if (String(args[0]).startsWith('/get_audit_logs')) {
+                        const body = await response.json();
+                        return {ok: response.ok, json: () => new Promise((resolve, reject) => window.__auditHeld.push({body, resolve, reject}))};
+                    }
+                    return response;
+                };
+            });
+            // Set both fields without implicit input/change events producing extra requests.
+            async function exactAuditRange(day) {
+                await page.evaluate(day => {
+                    document.querySelector('#start-date').value = day;
+                    document.querySelector('#end-date').value = day;
+                    document.querySelector('#end-date').dispatchEvent(new Event('change'));
+                }, day);
+            }
+            await exactAuditRange('2025-01-01');
+            await page.waitForFunction(() => window.__auditHeld.length === 1);
+            await page.locator('#message-filter').fill('second day');
+            await exactAuditRange('2025-01-02');
+            await page.waitForFunction(() => window.__auditHeld.length === 2);
+            await page.evaluate(() => {const next = window.__auditHeld[1]; next.resolve(next.body);});
+            await page.waitForFunction(() => document.querySelectorAll('#audit-logs-table tbody tr').length === 3);
+            const visibleAudit = page.locator('#audit-logs-table tbody tr:visible');
+            assert.equal(await visibleAudit.count(), 2);
+            assert((await visibleAudit.allTextContents()).every(text => text.includes('second day')));
+            await page.locator('#event-type-filter').selectOption('FIXTURE');
+            await page.evaluate(() => {const old = window.__auditHeld[0]; old.resolve(old.body);});
+            await page.waitForTimeout(75);
+            assert.equal(await visibleAudit.count(), 2);
+            assert(!(await page.locator('#audit-logs-table tbody').textContent()).includes('first day'));
+            // A late failure must not erase a successful newer range either.
+            await exactAuditRange('2025-01-01');
+            await page.waitForFunction(() => window.__auditHeld.length === 3);
+            await page.locator('#message-filter').fill('second day');
+            await exactAuditRange('2025-01-02');
+            await page.waitForFunction(() => window.__auditHeld.length === 4);
+            await page.evaluate(() => {const next = window.__auditHeld[3]; next.resolve(next.body);});
+            await page.waitForFunction(() => document.querySelectorAll('#audit-logs-table tbody tr').length === 3);
+            await page.evaluate(() => window.__auditHeld[2].reject(new Error('Synthetic late response failure')));
+            await page.waitForTimeout(75);
+            assert.equal(await page.locator('#event-type-filter').inputValue(), 'FIXTURE');
+            assert.equal(await visibleAudit.count(), 2);
+            const downloaded = page.waitForEvent('download');
+            await page.locator('#export-csv').click();
+            const download = await downloaded;
+            const csv = fs.readFileSync(await download.path(), 'utf8');
+            assert(csv.includes('second day midnight') && csv.includes('second day late'));
+            assert(!csv.includes('first day') && !csv.includes('excluded message') && !csv.includes('Loading...'));
+            console.log('PASS real audit same-day range, latest-response wins, loading filters, preserved text/type filters and filtered CSV under America/New_York');
+            assert.deepEqual(failures, []);
+            assert.deepEqual(externalRequests, []);
+            assert.deepEqual(policyViolations, []);
+            console.log('PASS actual-CSRF browser forms show safe errors for oversized password and empty username; existing user retained');
+            console.log('PASS isolated synthetic desktop, narrow and mobile visual capture');
+            return;
+        }
         await page.goto(`${base}/`);
         // Dispatch deterministically while the document is alive: a real unload
         // may cancel its fetch before the test sees it, hiding the cookie race.
@@ -221,13 +378,20 @@ function ciphertext() {
         });
         const oldCookies = await context.cookies();
         const adminContext = await browser.newContext();
-        await adminContext.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+        await prepareContext(adminContext);
         const adminPage = await adminContext.newPage();
+        adminPage.on('pageerror', error => failures.push(error.message));
         try {
             await adminPage.goto(`${base}/login`);
             await adminPage.locator('#username').fill('BROWSERADMIN');
             await adminPage.locator('#password').fill('Public-login-fixture-123!');
             await Promise.all([adminPage.waitForURL('**/dashboard'), adminPage.getByRole('button', {name: 'Login', exact: true}).click()]);
+            assert.equal((await adminPage.goto(`${base}/create_user`)).status(), 200);
+            assert.equal((await adminPage.goto(`${base}/audit_log_viewer`)).status(), 200);
+            await adminPage.waitForFunction(() => [...document.querySelectorAll('#audit-logs-table tbody tr')].some(row => row.cells.length === 5 && row.querySelector('.event-type')));
+            await adminPage.locator('#message-filter').fill('NO-SUCH-PUBLIC-AUDIT-FIXTURE');
+            assert.equal(await adminPage.locator('#audit-logs-table tbody tr:visible').count(), 0);
+            await adminPage.locator('#clear-filters').click();
             await adminPage.goto(`${base}/view_users`);
             const resetCsrf = await adminPage.locator('[name=csrf_token]').first().inputValue();
             const resetStatus = await adminPage.evaluate(async ({id, csrf}) => (await fetch(`/update_user/${id}`, {
@@ -257,8 +421,21 @@ function ciphertext() {
         await page.locator('#hide-password').click();
         await hidden();
         console.log('PASS committed admin reset invalidates copied browser cookie, stale-page reveal and JWT; fresh login restores authorized shared reveal');
-        // Bootstrap expects external jQuery, intentionally blocked in this local-only smoke.
-        assert(failures.every(message => /jQuery/.test(message)), JSON.stringify(failures));
-        console.log(JSON.stringify({status: 'passed', browser: browser.version(), headless: true, server: 'Gunicorn single worker, real app routes', csrf: 'enabled; actual form tokens', cookie: 'production Secure flag unchanged; Chromium localhost exception', externalNetwork: 'blocked', expectedExternalJqueryErrors: failures.length, limitation: 'single browser/local synthetic data; Playwright default disables BFCache; no deployment or security-readiness claim'}));
+        assert.deepEqual(failures, [], 'Application scripts must run without ignored jQuery errors');
+        assert.deepEqual(externalRequests, [], 'UI must not depend on external resources');
+        assert.deepEqual(policyViolations, [], 'Normal UI must satisfy the enforced CSP');
+        await page.evaluate(() => {
+            document.addEventListener('securitypolicyviolation', event => {
+                if (event.effectiveDirective === 'script-src-elem') window.syntheticInlineCspViolation = true;
+            });
+            const script = document.createElement('script');
+            script.textContent = 'window.syntheticInlineCspProbe = true';
+            document.body.appendChild(script);
+        });
+        await page.waitForFunction(() => window.syntheticInlineCspViolation === true);
+        const blocked = await page.evaluate(() => window.syntheticInlineCspProbe !== true);
+        assert.equal(blocked, true, 'Real browser must block injected inline scripts');
+        console.log('PASS same-origin assets, zero normal CSP violations, actual inline-script blocking');
+        console.log(JSON.stringify({status: 'passed', browser: browser.version(), headless: true, server: 'Gunicorn single worker, real app routes', csrf: 'enabled; actual form tokens', cookie: 'production Secure flag unchanged; Chromium localhost exception', externalNetwork: 'blocked', applicationErrors: failures.length, externalRequests: externalRequests.length, cspInlineScriptBlocked: blocked, limitation: 'single browser/local synthetic data; Playwright default disables BFCache; no deployment or security-readiness claim'}));
     } finally { await context.close(); await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,7 +1,8 @@
 <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Login</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-5.3.5/css/bootstrap.min.css') }}">
         <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
         <script src="{{ url_for('static', filename='js/functions.js')}}"></script>
         <link rel="icon" href="{{ url_for('favicon') }}">
@@ -38,7 +39,6 @@
                 </div>
             </div>
         </main>
-        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-        <script src="{{ url_for('static', filename='bootstrap/js/bootstrap.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='vendor/bootstrap-5.3.5/js/bootstrap.min.js') }}"></script>
     </body>
 </html>
