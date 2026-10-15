@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import re
 import pytz
-from audit_events import log_event
+from audit_events import log_event, stage_event
 from diagnostics import report_failure, rollback_safely
 from authorization import current_web_user, require_web_user, USER_MANAGERS, can_manage_user, can_assign_role, authentication_claims
 from account_input import account_fields
@@ -195,12 +195,17 @@ def create_user():
         if User.query.filter_by(username=username).first():
             return render_template('create_user.html', error="User already exists, please try again.")
         
-        # Commit the new user to the database
-        new_user = User(username=username, password=password, role=role)
-        db.session.add(new_user)
-        db.session.commit()
-
-        log_event(f"User {current_user.username} created user {username}.", "USER_CREATE", current_user.id)
+        # The account and its evidence must either both persist or neither.
+        try:
+            new_user = User(username=username, password=password, role=role)
+            db.session.add(new_user)
+            stage_event(f"User {current_user.username} created user {username}.",
+                        "USER_CREATE", current_user.id)
+            db.session.commit()
+        except Exception:
+            rollback_safely()
+            report_failure('request_failed')
+            return 'Unable to create user.', 500
 
         return redirect(url_for('dashboard_route'))
         
@@ -302,28 +307,35 @@ def update_user(user_id):
     if new_username != db_user.username and User.query.filter_by(username=new_username).first():
         return render_template('view_users.html', error="Username taken, please try again.", users=User.query.all(), erroronuser=new_username, selected_user=db_user)
 
-    # Update the user in the database
-    db_user.username = new_username
-    db_user.password = new_password
-    db_user.role = new_role
-    db.session.commit()
+    updating_self = current_user.id == db_user.id
+    try:
+        db_user.username = new_username
+        db_user.password = new_password
+        db_user.role = new_role
+        message = (f"User {current_user.username} updated their own account."
+                   if updating_self else
+                   f"User {current_user.username} updated user {new_username}.")
+        stage_event(message, "USER_UPDATE", current_user.id)
+        db.session.commit()
+    except Exception:
+        rollback_safely()
+        report_failure('request_failed')
+        return 'Unable to update user.', 500
 
     # Fetch the updated user from the database again (ensure the latest data)
     updated_user = User.query.filter_by(id=user_id).first()
 
     # If the logged-in user is updating their own account, log them out
-    if session['user_id'] == updated_user.id:
+    if updating_self:
         if password_changed:
             # Clear this cookie immediately; all copies and JWTs are invalid as
             # soon as the password transaction commits, even without this redirect.
             session.clear()
         else:
             session['username'] = updated_user.username
-        log_event(f"User {current_user.username} updated their own account.", "USER_UPDATE", current_user.id)
         return redirect(url_for('logout_route'))
 
     else:
-        log_event(f"User {current_user.username} updated user {new_username}.", "USER_UPDATE", current_user.id)
         # Make sure the updated user data is passed to the template
         return render_template('view_users.html', message="User updated successfully!", users=User.query.all(), messageonuser=updated_user.username, selected_user=updated_user)
 
