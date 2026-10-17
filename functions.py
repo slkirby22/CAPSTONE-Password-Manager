@@ -388,10 +388,15 @@ def _set_account_lock(user_id, locked):
                                error="Account already locked." if locked else "Account is not locked.",
                                users=User.query.all(), erroronuser=target.username,
                                selected_user=target, current_user_role=current_user.role)
-    target.failed_login_attempts = 4 if locked else 0
-    db.session.commit()
-    log_event(f"User {current_user.username} {operation}ed user {target.username}.",
-              'ACCOUNT_LOCK' if locked else 'ACCOUNT_UNLOCK', current_user.id)
+    try:
+        target.failed_login_attempts = 4 if locked else 0
+        stage_event(f"User {current_user.username} {operation}ed user {target.username}.",
+                    'ACCOUNT_LOCK' if locked else 'ACCOUNT_UNLOCK', current_user.id)
+        db.session.commit()
+    except Exception:
+        rollback_safely()
+        report_failure('request_failed')
+        return 'Unable to change account lock.', 500
     return render_template('view_users.html', message="Account locked" if locked else "Account unlocked",
                            users=User.query.all(), messageonuser=target.username,
                            selected_user=target, current_user_role=current_user.role)
